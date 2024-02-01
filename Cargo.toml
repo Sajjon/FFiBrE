@@ -8,6 +8,7 @@ build = "build.rs"
 uniffi = { version = "0.26.1", features = ["build"] }
 
 [dependencies]
+async_cell = "0.2.2"
 futures = { version = "0.3.30", features = ["thread-pool"] }
 rust_decimal = "1.34.0"
 serde = { version = "1.0.196", features = ["derive"] }

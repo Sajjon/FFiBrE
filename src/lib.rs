@@ -1,82 +1,29 @@
 use serde::{Deserialize, Serialize};
 use serde_json::to_vec;
-use std::{collections::HashMap, os::unix::thread, sync::Arc};
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex},
+};
+use uuid::Uuid;
 
-#[uniffi::export]
-pub trait NetworkRequest: Send + Sync {
-    fn url(&self) -> String;
-    fn http_body(&self) -> Vec<u8>;
-    fn http_method(&self) -> String;
-    fn http_header_fields(&self) -> HashMap<String, String>;
-}
-
-#[derive(uniffi::Record)]
-struct NetworkRequestImpl {
+#[derive(uniffi::Record, Clone, Debug)]
+struct NetworkRequest {
+    id: String,
     url: String,
     body: Vec<u8>,
     method: String,
     headers: HashMap<String, String>,
 }
-impl NetworkRequest for NetworkRequestImpl {
-    fn url(&self) -> String {
-        self.url.to_string()
-    }
 
-    fn http_body(&self) -> Vec<u8> {
-        self.body.clone()
-    }
-
-    fn http_method(&self) -> String {
-        self.method.clone()
-    }
-
-    fn http_header_fields(&self) -> HashMap<String, String> {
-        self.headers.clone()
-    }
-}
-
-#[uniffi::export]
-pub trait NetworkResponse: NetworkRequest {
-    fn status_code(&self) -> u16;
-}
-
-#[derive(uniffi::Record, Clone)]
-pub struct NetworkResponseImpl {}
-impl NetworkRequest for NetworkResponseImpl {
-    fn url(&self) -> String {
-        todo!()
-    }
-
-    fn http_body(&self) -> Vec<u8> {
-        todo!()
-    }
-
-    fn http_method(&self) -> String {
-        todo!()
-    }
-
-    fn http_header_fields(&self) -> HashMap<String, String> {
-        todo!()
-    }
-}
-impl NetworkResponse for NetworkResponseImpl {
-    fn status_code(&self) -> u16 {
-        todo!()
-    }
-}
-impl NetworkResponseImpl {
-    pub fn new() -> Self {
-        todo!()
-    }
-}
-impl NetworkRequestImpl {
-    pub fn new(url: String) -> Self {
-        todo!()
-    }
+#[derive(uniffi::Record, Clone, Debug)]
+pub struct NetworkResponse {
+    id: String,
+    response_code: u16,
+    body: Vec<u8>,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, thiserror::Error, uniffi::Error)]
-pub enum Error {
+pub enum NetworkError {
     #[error("Bad code")]
     BadResponseCode,
 
@@ -92,21 +39,27 @@ pub trait HTTPClientRequestSender: Send + Sync {
     /// Called by Rust, Swift side makes call, and then
     /// Swift side SHOULD call `got_response` method
     /// on `HTTPClient`
-    fn send(&self, request: NetworkRequestImpl) -> Result<(), Error>;
+    fn send(&self, request: NetworkRequest) -> Result<(), NetworkError>;
 }
 
-#[derive(uniffi::Enum, Clone)]
+#[derive(uniffi::Enum, Clone, Debug)]
 pub enum NetworkResult {
-    Success { value: NetworkResponseImpl },
-    Failure { error: Error },
+    Success { value: NetworkResponse },
+    Failure { error: NetworkError },
+}
+impl From<NetworkResult> for Result<NetworkResponse, NetworkError> {
+    fn from(value: NetworkResult) -> Self {
+        match value {
+            NetworkResult::Success { value } => Ok(value),
+            NetworkResult::Failure { error } => Err(error),
+        }
+    }
 }
 
-#[uniffi::export]
-pub trait HTTPClientNetworkResultReceiver: Send + Sync {
-    /// Called by Rust, Swift side makes call, and then
-    /// Swift side SHOULD call `got_result` method
-    /// on `HTTPClient`
-    fn got_result(&self, result: NetworkResult, for_request: NetworkRequestImpl);
+#[derive(uniffi::Record, Clone, Debug)]
+pub struct ResultOfNetworkRequest {
+    request: NetworkRequest,
+    result: NetworkResult,
 }
 
 const XRD: &str = "resource_rdx1tknxxxxxxxxxradxrdxxxxxxxxx009923554798xxxxxxxxxradxrd";
@@ -132,7 +85,7 @@ struct EntityState {
     items: Vec<EntityStateItem>,
 }
 
-fn parse_xrd_balance_from(entity_state: EntityState) -> Result<String, Error> {
+fn parse_xrd_balance_from(entity_state: EntityState) -> Result<String, NetworkError> {
     assert_eq!(entity_state.items.len(), 1);
     let item: &EntityStateItem = entity_state.items.first().unwrap();
     let fungible_resources = item.fungible_resources.clone();
@@ -143,7 +96,7 @@ fn parse_xrd_balance_from(entity_state: EntityState) -> Result<String, Error> {
         .filter(|x| x.resource_address == XRD)
         .map(|x| x.amount.clone())
         .next()
-        .ok_or(Error::NoXRDBalanceFound)
+        .ok_or(NetworkError::NoXRDBalanceFound)
 }
 
 #[derive(Serialize)]
@@ -158,46 +111,64 @@ impl GetEntityDetailsRequest {
     }
 }
 
-// #[derive(uniffi::Object)]
+#[derive(uniffi::Object)]
 pub struct HTTPClient {
-    // sender: tokio::sync::mpsc::UnboundedSender<NetworkRequestImpl>,
-    // receiver: tokio::sync::mpsc::UnboundedReceiver<NetworkResult>,
     request_sender: Arc<dyn HTTPClientRequestSender>,
-    result_receiver: Arc<dyn HTTPClientNetworkResultReceiver>, // sender: std::sync::mpsc::SyncSender<NetworkRequestImpl>,
-                                                               // receiver: std::sync::mpsc::Receiver<NetworkResult>
 }
 
-// #[uniffi::export]
-impl HTTPClient {
-    // #[uniffi::constructor]
-    pub fn new(
-        request_sender: Arc<dyn HTTPClientRequestSender>,
-        result_receiver: Arc<dyn HTTPClientNetworkResultReceiver>,
-    ) -> Self {
-        // let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
+use tokio::sync::Semaphore;
 
-        // let (sender, receiver) = std::sync::mpsc::sync_channel(1);
-        // Self { receiver, sender }
+#[derive(Debug)]
+pub struct Context {
+    pub semaphore: Semaphore,
+    pub result: Arc<Mutex<Option<ResultOfNetworkRequest>>>,
+}
+impl Context {
+    fn new() -> Self {
         Self {
-            request_sender,
-            result_receiver,
+            semaphore: Semaphore::new(0),
+            result: Arc::new(Mutex::new(None)),
         }
+    }
+    fn global() -> &'static Self {
+        CTX.get().expect("Context is not initialized")
+    }
+
+    async fn await_response() -> Result<NetworkResponse, NetworkError> {
+        let ctx = Self::global();
+        drop(ctx.semaphore.acquire().await.unwrap());
+        let res: Result<NetworkResponse, NetworkError> =
+            ctx.result.lock().unwrap().clone().unwrap().result.into();
+        *ctx.result.lock().unwrap() = None;
+        res
+    }
+
+    fn got_result(result: ResultOfNetworkRequest) {
+        let ctx = Self::global();
+        *ctx.result.lock().unwrap() = Some(result);
+        ctx.semaphore.add_permits(1)
+    }
+}
+
+use once_cell::sync::OnceCell;
+static CTX: OnceCell<Context> = OnceCell::new();
+
+#[uniffi::export]
+impl HTTPClient {
+    #[uniffi::constructor]
+    pub fn new(request_sender: Arc<dyn HTTPClientRequestSender>) -> Self {
+        Self { request_sender }
+    }
+
+    pub fn got_result_of_network_request(&self, result: ResultOfNetworkRequest) {
+        Context::got_result(result)
     }
 }
 
 impl HTTPClient {
-    async fn make_request(
-        &self,
-        request: NetworkRequestImpl,
-    ) -> Result<NetworkResponseImpl, Error> {
-        // self.request_sender.send(request);
-        // self.sender.send(request).unwrap();
-        // loop {
-        //     self.receiver.recv()
-        // }
+    async fn make_request(&self, request: NetworkRequest) -> Result<NetworkResponse, NetworkError> {
         self.request_sender.send(request).unwrap();
-
-        self.result_receiver.
+        Context::await_response().await
     }
 }
 
@@ -212,15 +183,16 @@ impl GatewayClient {
         method: impl AsRef<str>,
         request: T,
         map: F,
-    ) -> Result<V, Error>
+    ) -> Result<V, NetworkError>
     where
         T: Serialize,
         U: for<'a> Deserialize<'a>,
-        F: Fn(U) -> Result<V, Error>,
+        F: Fn(U) -> Result<V, NetworkError>,
     {
         let body = to_vec(&request).unwrap();
         let url = format!("https://mainnet.radixdlt.com/{}", path.as_ref());
-        let request = NetworkRequestImpl {
+        let request = NetworkRequest {
+            id: uuid::Uuid::new_v4().to_string(),
             url,
             body,
             method: method.as_ref().to_owned(),
@@ -232,8 +204,8 @@ impl GatewayClient {
         let response = self.http_client.make_request(request).await;
         response
             .and_then(|r| {
-                serde_json::from_slice::<U>(&r.http_body()).map_err(|_| {
-                    Error::UnableJSONDeserializeHTTPResponseBodyIntoTypeName {
+                serde_json::from_slice::<U>(&r.body).map_err(|_| {
+                    NetworkError::UnableJSONDeserializeHTTPResponseBodyIntoTypeName {
                         type_name: std::any::type_name::<U>().to_owned(),
                     }
                 })
@@ -241,31 +213,33 @@ impl GatewayClient {
             .and_then(|s| map(s))
     }
 
-    async fn get<T, U, V, F>(&self, path: impl AsRef<str>, request: T, map: F) -> Result<V, Error>
+    async fn get<T, U, V, F>(
+        &self,
+        path: impl AsRef<str>,
+        request: T,
+        map: F,
+    ) -> Result<V, NetworkError>
     where
         T: Serialize,
         U: for<'a> Deserialize<'a>,
-        F: Fn(U) -> Result<V, Error>,
+        F: Fn(U) -> Result<V, NetworkError>,
     {
         self.make_request(path, "GET", request, map).await
     }
 }
 
-impl GatewayClient {
-    pub fn new_with_http_client(http_client: Arc<HTTPClient>) -> Self {
-        Self { http_client }
-    }
-}
-
 #[uniffi::export]
 impl GatewayClient {
-  
     #[uniffi::constructor]
-    pub fn new(request_sender: Arc<dyn HTTPClientRequestSender>, result_receiver: Arc<dyn HTTPClientNetworkResultReceiver>) -> Self {
-        Self::new_with_http_client(HTTPClient::new(request_sender, result_receiver).into())
+    pub fn new(http_client: Arc<HTTPClient>) -> Self {
+        CTX.set(Context::new()).unwrap();
+        Self { http_client }
     }
 
-    pub async fn get_xrd_balance_of_account(&self, address: String) -> Result<String, Error> {
+    pub async fn get_xrd_balance_of_account(
+        &self,
+        address: String,
+    ) -> Result<String, NetworkError> {
         self.get(
             "state/entity/details",
             GetEntityDetailsRequest::new(address),

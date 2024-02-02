@@ -1,6 +1,8 @@
 # UniFFI "async" operations in FFI invoked from Rust
 
-Showcase of FFI side (Swift side) - executing a Network request using `URLSession`'s [`dataTask:with:completionHandler`](https://developer.apple.com/documentation/foundation/urlsession/1407613-datatask) invoked from Rust, and letting Rust side deserialize JSON of the HTTP body and "massage the data" into an REST call result - which is exposed to FFI side (Swift side) as an async fn inside of Rust.
+Showcase of FFI side (Swift side) - executing a Network request called from Rust, implemented with [tokio::oneshot](https://docs.rs/tokio/latest/tokio/sync/oneshot/fn.channel.html).
+
+Swift is using `URLSession`'s [`dataTask:with:completionHandler`](https://developer.apple.com/documentation/foundation/urlsession/1407613-datatask) invoked from Rust, and letting Rust side deserialize JSON of the HTTP body and "massage the data" into an REST call result - which is exposed to FFI side (Swift side) as an async fn inside of Rust.
 
 # Try
 
@@ -50,7 +52,7 @@ impl FFIDataResultListener {
 }
 ```
 
-And used by `Dispatcher`
+The `FFIOperationHandler` is used by a `FFIOperationDispatcher`.
 
 ```rust,no_run
 #[derive(Object)]

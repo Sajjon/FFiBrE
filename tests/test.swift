@@ -3,13 +3,23 @@ import network
 
 extension NetworkRequest {
   func urlRequest() throws -> URLRequest {
-    fatalError()
+    guard let url = URL(string: self.url) else {
+      fatalError("invalid url")
+    }
+    var request = URLRequest(url: url)
+    request.httpMethod = self.method
+    request.httpBody = self.body
+    request.allHTTPHeaderFields = self.headers
+    print("Swift constructed request: \(request)\nfrom: \(self)")
+    return request
   }
 }
 
 extension URLSession: HttpClientRequestSender {
   public func send(request: NetworkRequest, responseBack: NotifyRustFromSwift) throws {
-    try self.dataTask(with: request.urlRequest()) {
+    print("⚡️ START HttpClientRequestSender (URLSession) - send:request:responseBack method")
+    defer { print("⚡️ END HttpClientRequestSender (URLSession) - send:request:responseBack method") }
+    let dataTask = try self.dataTask(with: request.urlRequest()) {
       (data: Data?, resp: URLResponse?, err: Error?) in
       let res: NetworkResult = {
         if let data {
@@ -24,25 +34,24 @@ extension URLSession: HttpClientRequestSender {
         }
       }()
       responseBack.response(result: res)
-    }.resume()
+    }
+    print("Created dataTask, now resuming it")
+    dataTask.resume()
   }
 }
 
-var counter = DispatchGroup()
-counter.enter()
-
-func test() throws {
+func test() async throws {
   print("HELLO WORLD from swift")
+  defer { print("BY BYE from swift") }
 
   let httpClient = HttpClient(requestSender: URLSession.shared)
   let gatewayClient = GatewayClient(httpClient: httpClient)
-  Task {
-    let balance = try await gatewayClient.getXrdBalanceOfAccount(
-      address: "account_rdx16xlfcpp0vf7e3gqnswv8j9k58n6rjccu58vvspmdva22kf3aplease")
-    print("✅ successfully got balance")
-    counter.leave()
-  }
+  print("🧵🚀Task started")
+  let balance = try await gatewayClient.getXrdBalanceOfAccount(
+    address: "account_rdx16xlfcpp0vf7e3gqnswv8j9k58n6rjccu58vvspmdva22kf3aplease")
+  print("✅ successfully got balance: \(balance)")
+  print("🧵✅ Task end")
 
 }
 
-try! test()
+try! await test()

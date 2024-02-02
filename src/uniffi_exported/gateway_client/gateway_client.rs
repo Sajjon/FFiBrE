@@ -8,8 +8,10 @@ pub struct GatewayClient {
 #[export]
 impl GatewayClient {
     #[uniffi::constructor]
-    pub fn new(http_client: Arc<HTTPClient>) -> Self {
-        Self { http_client }
+    pub fn new(network_antenna: Arc<dyn DeviceNetworkAntenna>) -> Self {
+        Self {
+            http_client: HTTPClient::new(network_antenna).into(),
+        }
     }
 
     pub async fn get_xrd_balance_of_account(

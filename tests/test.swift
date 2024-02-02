@@ -18,12 +18,12 @@ extension HTTPURLResponse {
   }
 }
 
-// Conform `[Swift]URLSession` to `[Rust]HttpClientRequestSender`
-extension URLSession: HttpClientRequestSender {
+// Conform `[Swift]URLSession` to `[Rust]DeviceNetworkAntenna`
+extension URLSession: DeviceNetworkAntenna {
 
-  public func send(
+  public func makeRequest(
     request rustRequest: NetworkRequest,
-    responseBack: NotifyRustFromSwift
+    listenerRustSide: NetworkResultListener
   ) throws {
     let urlString = rustRequest.url
     guard let url = URL(string: urlString) else {
@@ -57,7 +57,7 @@ extension URLSession: HttpClientRequestSender {
 
       }()
       // Notify Rust side that network request has finished by passing `[Rust]NetworkResult`
-      responseBack.response(result: networkResult)
+      listenerRustSide.notifyResult(result: networkResult)
     }
 
     // Start `[Swift]URLSessionDataTask`
@@ -66,11 +66,9 @@ extension URLSession: HttpClientRequestSender {
 }
 
 func test() async throws {
-  // Init `[Rust]HttpClient` by passing `[Swift]URLSession` as `[Rust]HttpClientRequestSender`
+  // Init `[Rust]GatewayClient` by passing `[Swift]URLSession` as `[Rust]DeviceNetworkAntenna`
   // which conforms thanks to impl above
-  let httpClient = HttpClient(requestSender: URLSession.shared)
-  // Init `[Rust]GatewayClient` with httpClient, now capable of doing network request
-  let gatewayClient = GatewayClient(httpClient: httpClient)
+  let gatewayClient = GatewayClient(networkAntenna: URLSession.shared)
 
   // Call async method in Rust land from Swift!
   do {

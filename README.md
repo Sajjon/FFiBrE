@@ -147,7 +147,7 @@ Translate NetworkRequest -> `URLRequest`
 
 ```swift
 import Foundation
-import network
+import ffibre
 
 // Convert `[Rust]NetworkRequest` to `[Swift]URLRequest`
 extension NetworkRequest {
@@ -204,9 +204,8 @@ Now ready to be used!
 let gatewayClient = GatewayClient(networkAntenna: URLSession.shared)
 // Call async method in Rust land from Swift!
 let balance = try await gatewayClient.getXrdBalanceOfAccount(
-	address: "account_rdx16xlfcpp0vf7e3gqnswv8j9k58n6rjccu58vvspmdva22kf3aplease"
+	address: "account_rdx..."
 )
-// Print result, if successful
 print("SWIFT ✅ getXrdBalanceOfAccount success, got balance: \(balance) ✅")
 ```
 
@@ -266,7 +265,8 @@ let gatewayClient = GatewayClient(
       try await urlSession.data(for: $0.asNetworkRequest.urlRequest()).0
     }
 )
-balance = try await gatewayClient.getXrdBalanceOfAccount(address: "...")
+let balance = try await gatewayClient.getXrdBalanceOfAccount(address: "account_rdx...")
+print("SWIFT ✅ getXrdBalanceOfAccount success, got balance: \(balance) ✅")
 ```
 
 🎉

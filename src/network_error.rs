@@ -42,11 +42,11 @@ pub enum RustSideError {
     #[error("Failed to receive response from Swift")]
     FailedToReceiveResponseFromSwift,
 
+    #[error("Failed to propagate FFI operation result back to displatcher")]
+    FailedToPropagateResultFromFFIOperationBackToDispatcher,
+
     #[error("HTTP Body of response from Swift was nil")]
     ResponseBodyWasNil,
-
-    #[error("HTTP Body of response from Swift was empty")]
-    ResponseBodyWasEmpty,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, ThisError, Error)]

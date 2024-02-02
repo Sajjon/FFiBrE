@@ -23,7 +23,13 @@ impl FFIDataResultListener {
     /// an `execute_operation:operation:listener_rust_side` method on a [`FFIOperationHandler`],
     /// when the operation has finished, with the [`FFIOperationResult`].
     fn notify_result(&self, result: FFIOperationResult) {
-        let sender = self.sender.lock().unwrap().take().unwrap();
-        sender.send(result).unwrap();
+        self.sender
+            .lock()
+            .expect("Should only have access sender Mutex once.")
+            .take()
+            .expect("You MUST NOT call `notifyResult` twice in Swift.")
+            .send(result)
+            .map_err(|_| RustSideError::FailedToPropagateResultFromFFIOperationBackToDispatcher)
+            .expect("Must never fail, since some context's in FFI side cannot be throwing.")
     }
 }

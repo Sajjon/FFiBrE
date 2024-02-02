@@ -18,12 +18,37 @@ extension HTTPURLResponse {
   }
 }
 
-// Conform `[Swift]URLSession` to `[Rust]DeviceNetworkAntenna`
-extension URLSession: DeviceNetworkAntenna {
+// Conform `[Swift]URLSession` to `[Rust]FfiOperationHandler`
+extension URLSession: FfiOperationHandler {
+  public func supportedOperations() -> [FfiOperationKind] {
+    [.networking]
+  }
 
-  public func makeRequest(
+  public func executeOperation(
+    operation rustOperation: FfiOperation,
+    listenerRustSide: FfiDataResultListener
+  ) throws {
+    guard case let .networking(rustNetworkRequest) = rustOperation else {
+      fatalError(
+        """
+        Should never happen - Rust side should have queried `supportedOperations()` which states we only support `.networking` request, so no other operation kind should have been sent.
+        """
+      )
+    }
+    return try makeNetworkRequest(
+      request: rustNetworkRequest,
+      listenerRustSide: listenerRustSide
+    )
+  }
+}
+
+extension URLSession {
+
+  // Make a network call using this URLSession, pass back result to Rust via
+  // callback.
+  func makeNetworkRequest(
     request rustRequest: NetworkRequest,
-    listenerRustSide: NetworkResultListener
+    listenerRustSide: FfiDataResultListener
   ) throws {
     let urlString = rustRequest.url
     guard let url = URL(string: urlString) else {
@@ -35,7 +60,9 @@ extension URLSession: DeviceNetworkAntenna {
     let task = dataTask(with: swiftURLRequest) { data, urlResponse, error in
       // Inside response callback, called by URLSession when URLSessionDataTask finished
       // translate triple `[Swift](data, urlResponse, error)` -> `[Rust]NetworkResult`
-      let networkResult: NetworkResult = {
+
+      // Build result of operation, by inspecting passed triple.
+      let networkResult: FfiOperationResult = {
         guard let httpResponse = urlResponse as? HTTPURLResponse else {
           return .failure(
             error: .UnableToCastUrlResponseToHttpUrlResponse
@@ -43,20 +70,24 @@ extension URLSession: DeviceNetworkAntenna {
         }
         let statusCode = UInt16(httpResponse.statusCode)
         guard httpResponse.ok else {
-          let reason = error.map { String(describing: $0) } ?? "Unknown"
+          let urlSessionUnderlyingError = error.map { String(describing: $0) }
+          let errorMessageFromGateway = data.map { String(data: $0, encoding: .utf8) ?? nil } ?? nil
           return .failure(
             error: .RequestFailed(
-              statusCode: statusCode, reason: reason
+              statusCode: statusCode,
+              urlSessionUnderlyingError: urlSessionUnderlyingError,
+              errorMessageFromGateway: errorMessageFromGateway
             )
           )
         }
 
         return .success(
-          value: NetworkResponse(statusCode: statusCode, body: data)
+          value: data
         )
 
       }()
-      // Notify Rust side that network request has finished by passing `[Rust]NetworkResult`
+
+      // Notify Rust side that network request has finished by passing `[Rust]FfiOperationResult`
       listenerRustSide.notifyResult(result: networkResult)
     }
 
@@ -66,7 +97,7 @@ extension URLSession: DeviceNetworkAntenna {
 }
 
 func test() async throws {
-  // Init `[Rust]GatewayClient` by passing `[Swift]URLSession` as `[Rust]DeviceNetworkAntenna`
+  // Init `[Rust]GatewayClient` by passing `[Swift]URLSession` as `[Rust]FfiOperationHandler`
   // which conforms thanks to impl above
   let gatewayClient = GatewayClient(networkAntenna: URLSession.shared)
 

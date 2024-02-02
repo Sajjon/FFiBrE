@@ -1,4 +1,6 @@
-# UniFFI "async" operations in FFI invoked from Rust
+# FFiBRe - FFI BRidgE - async bridge Swift<>Rust PoC
+
+FFiBRe pronounced "fibre" is a **Proof-of-Concept** of bridging between Swift and Rust for async methods.
 
 Showcase of FFI side (Swift side) - executing a Network request called from Rust, implemented with [tokio::oneshot](https://docs.rs/tokio/latest/tokio/sync/oneshot/fn.channel.html).
 

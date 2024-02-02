@@ -1,6 +1,29 @@
 use crate::prelude::*;
 
 impl GatewayClient {
+    fn model_from_response<U>(&self, response: NetworkResponse) -> Result<U, RustSideError>
+    where
+        U: for<'a> Deserialize<'a>,
+    {
+        // Try read non empty HTTP body from response
+        let body = response
+            .body
+            .ok_or(RustSideError::ResponseBodyWasNil)
+            .and_then(|b| {
+                if b.is_empty() {
+                    Err(RustSideError::ResponseBodyWasNil.into())
+                } else {
+                    Ok(b)
+                }
+            })?;
+
+        serde_json::from_slice::<U>(&body).map_err(|_| {
+            RustSideError::UnableJSONDeserializeHTTPResponseBodyIntoTypeName {
+                type_name: std::any::type_name::<U>().to_owned(),
+            }
+        })
+    }
+
     async fn make_request<T, U, V, F, E>(
         &self,
         path: impl AsRef<str>,
@@ -14,8 +37,14 @@ impl GatewayClient {
         F: Fn(U) -> Result<V, E>,
         E: Into<NetworkError>,
     {
+        // JSON serialize request into body bytes
         let body = to_vec(&request).unwrap();
+
+        // Append relative path to base url
         let url = format!("https://mainnet.radixdlt.com/{}", path.as_ref());
+
+        // Create Network request object, which will be translated by
+        // Swift side into a `[Swift]URLRequest`
         let request = NetworkRequest {
             url,
             body,
@@ -25,29 +54,23 @@ impl GatewayClient {
                 "application/json".to_owned(),
             )]),
         };
-        let response = self.http_client.make_request(request).await;
-        response
-            .and_then(|r| r.body.ok_or(RustSideError::ResponseBodyWasNil.into()))
-            .and_then(|b| {
-                if b.is_empty() {
-                    Err(RustSideError::ResponseBodyWasNil.into())
-                } else {
-                    Ok(b)
-                }
-            })
-            .and_then(|b| {
-                serde_json::from_slice::<U>(&b).map_err(|_| {
-                    RustSideError::UnableJSONDeserializeHTTPResponseBodyIntoTypeName {
-                        type_name: std::any::type_name::<U>().to_owned(),
-                    }
-                    .into()
-                })
-            })
-            .and_then(|s| map(s).map_err(|e| e.into()))
+
+        // Let Swift side make network request and await response
+        let response = self.http_client.make_request(request).await?;
+
+        // Read out HTTP body from response and JSON parse it into U
+        let model = self
+            .model_from_response(response)
+            .map_err(|error| NetworkError::FromRust { error })?;
+
+        // Map U -> V
+        map(model).map_err(|e| e.into())
     }
 }
 
 impl GatewayClient {
+    /// Makes a HTTP POST request using `http_client`, which in turn uses
+    /// DeviceNetworkAntenna "installed" from Swift.
     pub(crate) async fn post<T, U, V, F, E>(
         &self,
         path: impl AsRef<str>,

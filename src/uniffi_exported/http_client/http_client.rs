@@ -13,7 +13,6 @@ impl HTTPClient {
     }
 }
 
-#[derive(Object)]
 pub struct OneshotSenderWrapper(Mutex<Option<Sender<NetworkResult>>>);
 
 impl OneshotSenderWrapper {

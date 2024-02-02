@@ -32,4 +32,5 @@ impl FFIDataResultListener {
             .map_err(|_| RustSideError::FailedToPropagateResultFromFFIOperationBackToDispatcher)
             .expect("Must never fail, since some context's in FFI side cannot be throwing.")
     }
+
 }

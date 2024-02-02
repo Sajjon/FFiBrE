@@ -2,15 +2,15 @@ use crate::prelude::*;
 
 #[derive(Object)]
 pub struct GatewayClient {
-    pub(crate) http_client: Arc<HTTPClient>,
+    pub(crate) request_dispatcher: Arc<FFIOperationDispatcher>,
 }
 
 #[export]
 impl GatewayClient {
     #[uniffi::constructor]
-    pub fn new(network_antenna: Arc<dyn DeviceNetworkAntenna>) -> Self {
+    pub fn new(network_antenna: Arc<dyn FFIOperationHandler>) -> Self {
         Self {
-            http_client: HTTPClient::new(network_antenna).into(),
+            request_dispatcher: FFIOperationDispatcher::new(network_antenna).into(),
         }
     }
 

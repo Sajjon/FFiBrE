@@ -1,7 +1,5 @@
-mod gateway_client;
-mod http_client;
-mod network_result_listener;
+mod example_networking;
+mod ffi_operation;
 
-pub use gateway_client::*;
-pub use http_client::*;
-pub use network_result_listener::*;
+pub use example_networking::*;
+pub use ffi_operation::*;

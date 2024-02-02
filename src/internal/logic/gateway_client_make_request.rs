@@ -1,13 +1,12 @@
 use crate::prelude::*;
 
 impl GatewayClient {
-    fn model_from_response<U>(&self, response: NetworkResponse) -> Result<U, RustSideError>
+    fn model_from_response<U>(&self, response: Option<Vec<u8>>) -> Result<U, RustSideError>
     where
         U: for<'a> Deserialize<'a>,
     {
         // Try read non empty HTTP body from response
         let body = response
-            .body
             .ok_or(RustSideError::ResponseBodyWasNil)
             .and_then(|b| {
                 if b.is_empty() {
@@ -55,8 +54,10 @@ impl GatewayClient {
             )]),
         };
 
+        let ffi_operation = FFIOperation::Networking { request: request };
+
         // Let Swift side make network request and await response
-        let response = self.http_client.make_request(request).await?;
+        let response = self.request_dispatcher.dispatch(ffi_operation).await?;
 
         // Read out HTTP body from response and JSON parse it into U
         let model = self

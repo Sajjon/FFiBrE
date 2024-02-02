@@ -18,12 +18,30 @@ extension HTTPURLResponse {
   }
 }
 
-// Conform `[Swift]URLSession` to `[Rust]DeviceNetworkAntenna`
-extension URLSession: DeviceNetworkAntenna {
+// Conform `[Swift]URLSession` to `[Rust]FfiOperationHandler`
+extension URLSession: FfiOperationHandler {
+  public func supportedOperations() -> [FfiOperationKind] {
+    [.networking]
+  }
+  
+  public func executeOperation(
+    operation rustOperation: FfiOperation,
+    listenerRustSide: FfiDataResultListener
+  ) throws {
+    guard case let .networking(rustNetworkRequest) = rustOperation else {
+      fatalError("Should never happen.")
+    }
+    return try makeNetworkRequest(
+      request: rustNetworkRequest, 
+      listenerRustSide: listenerRustSide
+    )
+  }
+}
 
-  public func makeRequest(
+extension URLSession {
+  func makeNetworkRequest(
     request rustRequest: NetworkRequest,
-    listenerRustSide: NetworkResultListener
+    listenerRustSide: FfiDataResultListener
   ) throws {
     let urlString = rustRequest.url
     guard let url = URL(string: urlString) else {
@@ -35,7 +53,7 @@ extension URLSession: DeviceNetworkAntenna {
     let task = dataTask(with: swiftURLRequest) { data, urlResponse, error in
       // Inside response callback, called by URLSession when URLSessionDataTask finished
       // translate triple `[Swift](data, urlResponse, error)` -> `[Rust]NetworkResult`
-      let networkResult: NetworkResult = {
+      let networkResult: FfiOperationResult = {
         guard let httpResponse = urlResponse as? HTTPURLResponse else {
           return .failure(
             error: .UnableToCastUrlResponseToHttpUrlResponse
@@ -52,7 +70,7 @@ extension URLSession: DeviceNetworkAntenna {
         }
 
         return .success(
-          value: NetworkResponse(statusCode: statusCode, body: data)
+          value: data
         )
 
       }()
@@ -66,7 +84,7 @@ extension URLSession: DeviceNetworkAntenna {
 }
 
 func test() async throws {
-  // Init `[Rust]GatewayClient` by passing `[Swift]URLSession` as `[Rust]DeviceNetworkAntenna`
+  // Init `[Rust]GatewayClient` by passing `[Swift]URLSession` as `[Rust]FfiOperationHandler`
   // which conforms thanks to impl above
   let gatewayClient = GatewayClient(networkAntenna: URLSession.shared)
 

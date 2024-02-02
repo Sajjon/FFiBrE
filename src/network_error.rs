@@ -15,6 +15,16 @@ pub enum SwiftSideError {
 
 #[derive(Debug, PartialEq, Eq, Clone, ThisError, Error)]
 pub enum RustSideError {
+    #[error(
+        "Tried to dispatch unsupported operation {:?}, handler only supports: {:?}",
+        operation,
+        only_supported
+    )]
+    UnsupportedOperation {
+        operation: FFIOperation,
+        only_supported: Vec<FFIOperationKind>,
+    },
+
     #[error("Unable to JSON deserialize HTTP response body into type: {type_name}")]
     UnableJSONDeserializeHTTPResponseBodyIntoTypeName { type_name: String },
 

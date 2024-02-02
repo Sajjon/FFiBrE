@@ -1,4 +1,4 @@
-# FFiBRe - FFI BRidgE - async bridge Swift<>Rust PoC
+# FFiBre - FFI BridgE - async bridge Swift<>Rust PoC
 
 FFiBRe pronounced "fibre" is a **Proof-of-Concept** of bridging between Swift and Rust for async methods.
 

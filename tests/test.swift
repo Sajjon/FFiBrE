@@ -1,5 +1,5 @@
 import Foundation
-import network
+import ffibre
 
 extension FfiOperation {
   var asNetworkRequest: NetworkRequest {

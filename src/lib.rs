@@ -1,10 +1,10 @@
 mod internal;
-mod network_error;
+mod ffibre_error;
 mod uniffi_exported;
 
 pub mod prelude {
     pub(crate) use crate::internal::*;
-    pub use crate::network_error::*;
+    pub use crate::ffibre_error::*;
     pub use crate::uniffi_exported::*;
 
     pub(crate) use serde::{Deserialize, Serialize};
@@ -17,4 +17,4 @@ pub mod prelude {
 
 pub use prelude::*;
 
-include_scaffolding!("network");
+include_scaffolding!("ffibre");

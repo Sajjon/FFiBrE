@@ -6,9 +6,11 @@ impl HTTPClient {
         request: NetworkRequest,
     ) -> Result<NetworkResponse, NetworkError> {
         let (response_sender, response_receiver) = channel();
-        let sender_wrapper = OneshotSenderWrapper::new(response_sender);
-        self.request_sender
-            .send(request, Arc::new(sender_wrapper))
+
+        let network_result_listener = NetworkResultListener::new(response_sender);
+
+        self.network_antenna
+            .make_request(request, network_result_listener.into())
             .unwrap();
 
         response_receiver

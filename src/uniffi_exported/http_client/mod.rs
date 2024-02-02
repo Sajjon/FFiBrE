@@ -1,11 +1,11 @@
 mod http_client;
-mod http_client_request_sender;
+mod device_network_antenna;
 mod network_request;
 mod network_response;
 mod network_result;
 
 pub use http_client::*;
-pub use http_client_request_sender::*;
+pub use device_network_antenna::*;
 pub use network_request::*;
 pub use network_response::*;
 pub use network_result::*;

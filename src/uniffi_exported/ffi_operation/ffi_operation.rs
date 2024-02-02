@@ -15,6 +15,10 @@ impl HasFFIOperationKindInstance for NetworkRequest {
     }
 }
 
+/// An operation we dispatch from Rust side to FFI (Swift)
+/// side using [`FFIOperationDispatcher`], which responds
+/// back to us (Rust side) using [`FFIDataResultListener`]
+/// callback.
 #[derive(Clone, Debug, PartialEq, Eq, Enum)]
 pub enum FFIOperation {
     Networking { request: NetworkRequest },

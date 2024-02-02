@@ -9,8 +9,16 @@ pub enum SwiftSideError {
     #[error("Unable to cast Swift 'Foundation.URLResponse' into 'Foundation.HTTPURLResponse'")]
     UnableToCastUrlResponseToHTTPUrlResponse,
 
-    #[error("Swift 'URLRequest' failed with code '{status_code}', reason: '{reason}'")]
-    RequestFailed { status_code: u16, reason: String },
+    #[error(
+        "Swift 'URLRequest' failed with code '{status_code}', error message from Gateway: '{:?}', underlying error (URLSession): '{:?}'",
+        error_message_from_gateway,
+        url_session_underlying_error
+    )]
+    RequestFailed {
+        status_code: u16,
+        url_session_underlying_error: Option<String>,
+        error_message_from_gateway: Option<String>,
+    },
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, ThisError, Error)]

@@ -19,6 +19,9 @@ impl FFIDataResultListener {
 
 #[export]
 impl FFIDataResultListener {
+    /// This is called from FFI Side (Swift side), inside the implementation of
+    /// an `execute_operation:operation:listener_rust_side` method on a [`FFIOperationHandler`],
+    /// when the operation has finished, with the [`FFIOperationResult`].
     fn notify_result(&self, result: FFIOperationResult) {
         let sender = self.sender.lock().unwrap().take().unwrap();
         sender.send(result).unwrap();

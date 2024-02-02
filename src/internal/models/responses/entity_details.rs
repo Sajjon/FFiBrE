@@ -12,11 +12,15 @@ pub struct FungibleResources {
 }
 
 #[derive(Deserialize, Clone)]
-pub struct EntityStateItem {
+pub struct EntityDetailsItem {
     pub(crate) fungible_resources: FungibleResources,
 }
 
+/// The response a call to the REST Endpoint:
+/// `https://mainnet.radixdlt.com/state/entity/details`
+///
+/// Which contains token balances of an account.
 #[derive(Deserialize, Clone)]
-pub struct EntityState {
-    pub(crate) items: Vec<EntityStateItem>,
+pub struct GetEntityDetailsResponse {
+    pub(crate) items: Vec<EntityDetailsItem>,
 }

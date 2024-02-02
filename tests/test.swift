@@ -23,22 +23,29 @@ extension URLSession: FfiOperationHandler {
   public func supportedOperations() -> [FfiOperationKind] {
     [.networking]
   }
-  
+
   public func executeOperation(
     operation rustOperation: FfiOperation,
     listenerRustSide: FfiDataResultListener
   ) throws {
     guard case let .networking(rustNetworkRequest) = rustOperation else {
-      fatalError("Should never happen.")
+      fatalError(
+        """
+        Should never happen - Rust side should have queried `supportedOperations()` which states we only support `.networking` request, so no other operation kind should have been sent.
+        """
+      )
     }
     return try makeNetworkRequest(
-      request: rustNetworkRequest, 
+      request: rustNetworkRequest,
       listenerRustSide: listenerRustSide
     )
   }
 }
 
 extension URLSession {
+
+  // Make a network call using this URLSession, pass back result to Rust via
+  // callback.
   func makeNetworkRequest(
     request rustRequest: NetworkRequest,
     listenerRustSide: FfiDataResultListener
@@ -53,6 +60,8 @@ extension URLSession {
     let task = dataTask(with: swiftURLRequest) { data, urlResponse, error in
       // Inside response callback, called by URLSession when URLSessionDataTask finished
       // translate triple `[Swift](data, urlResponse, error)` -> `[Rust]NetworkResult`
+
+      // Build result of operation, by inspecting passed triple.
       let networkResult: FfiOperationResult = {
         guard let httpResponse = urlResponse as? HTTPURLResponse else {
           return .failure(
@@ -61,10 +70,13 @@ extension URLSession {
         }
         let statusCode = UInt16(httpResponse.statusCode)
         guard httpResponse.ok else {
-          let reason = error.map { String(describing: $0) } ?? "Unknown"
+          let urlSessionUnderlyingError = error.map { String(describing: $0) }
+          let errorMessageFromGateway = data.map { String(data: $0, encoding: .utf8) ?? nil } ?? nil
           return .failure(
             error: .RequestFailed(
-              statusCode: statusCode, reason: reason
+              statusCode: statusCode,
+              urlSessionUnderlyingError: urlSessionUnderlyingError,
+              errorMessageFromGateway: errorMessageFromGateway
             )
           )
         }
@@ -74,7 +86,8 @@ extension URLSession {
         )
 
       }()
-      // Notify Rust side that network request has finished by passing `[Rust]NetworkResult`
+
+      // Notify Rust side that network request has finished by passing `[Rust]FfiOperationResult`
       listenerRustSide.notifyResult(result: networkResult)
     }
 

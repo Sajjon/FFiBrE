@@ -2,9 +2,11 @@ use crate::prelude::*;
 
 const XRD: &str = "resource_rdx1tknxxxxxxxxxradxrdxxxxxxxxx009923554798xxxxxxxxxradxrd";
 
-pub(crate) fn parse_xrd_balance_from(entity_state: EntityState) -> Result<String, RustSideError> {
+pub(crate) fn parse_xrd_balance_from(
+    entity_state: GetEntityDetailsResponse,
+) -> Result<String, RustSideError> {
     assert_eq!(entity_state.items.len(), 1);
-    let item: &EntityStateItem = entity_state.items.first().unwrap();
+    let item: &EntityDetailsItem = entity_state.items.first().unwrap();
     let fungible_resources = item.fungible_resources.clone();
 
     fungible_resources

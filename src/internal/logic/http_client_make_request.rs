@@ -13,7 +13,11 @@ impl HTTPClient {
 
         response_receiver
             .await
-            .map_err(|_| NetworkError::FailedToReceiveResponseFromSwift)
-            .and_then(|r| r.into())
+            .map_err(|_| RustSideError::FailedToReceiveResponseFromSwift)
+            .map_err(|e| e.into())
+            .and_then(|r| {
+                let res: Result<NetworkResponse, SwiftSideError> = r.into();
+                res.map_err(|e| e.into())
+            })
     }
 }

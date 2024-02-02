@@ -2,10 +2,8 @@ import Foundation
 import network
 
 extension NetworkRequest {
-  func urlRequest() throws -> URLRequest {
-    guard let url = URL(string: self.url) else {
-      fatalError("invalid url")
-    }
+  /// Convert `[Rust]NetworkRequest` to `[Swift]URLRequest`
+  func urlRequest(url: URL) -> URLRequest {
     var request = URLRequest(url: url)
     request.httpMethod = self.method
     request.httpBody = self.body
@@ -14,25 +12,49 @@ extension NetworkRequest {
   }
 }
 
+extension HTTPURLResponse {
+  var ok: Bool {
+    (200...299).contains(statusCode)
+  }
+}
+
+/// Conform `[Swift]URLSession` to `[Rust]HttpClientRequestSender`
 extension URLSession: HttpClientRequestSender {
-  public func send(request: NetworkRequest, responseBack: NotifyRustFromSwift) throws {
-    let dataTask = try self.dataTask(with: request.urlRequest()) {
-      (data: Data?, resp: URLResponse?, err: Error?) in
-      let res: NetworkResult = {
-        if let data {
-          guard let httpResp = resp as? HTTPURLResponse else { fatalError("not http resp") }
-          let resResp = NetworkResponse(responseCode: UInt16(httpResp.statusCode), body: data)
-          return NetworkResult.success(value: resResp)
-        } else if let err {
-          return NetworkResult.failure(
-            error: NetworkError.UrlSessionDataTaskFailed(underlying: String(describing: err)))
-        } else {
-          fatalError("Bad state, data AND error was nil.")
-        }
-      }()
-      responseBack.response(result: res)
+
+  public func send(
+    request rustRequest: NetworkRequest,
+    responseBack: NotifyRustFromSwift
+  ) throws {
+    let urlString = rustRequest.url
+    guard let url = URL(string: urlString) else {
+      throw SwiftSideError.FailedToCreateUrlFrom(string: urlString)
     }
-    dataTask.resume()
+    let swiftURLRequest = rustRequest.urlRequest(url: url)
+    let task = dataTask(with: swiftURLRequest) { data, urlResponse, error in
+      let networkResult: NetworkResult = {
+        guard let httpResponse = urlResponse as? HTTPURLResponse else {
+          return .failure(
+            error: .UnableToCastUrlResponseToHttpUrlResponse
+          )
+        }
+        let statusCode = UInt16(httpResponse.statusCode)
+        guard httpResponse.ok else {
+          let reason = error.map { String(describing: $0) } ?? "Unknown"
+          return .failure(
+            error: .RequestFailed(
+              statusCode: statusCode, reason: reason
+            )
+          )
+        }
+
+        return .success(
+          value: NetworkResponse(statusCode: statusCode, body: data)
+        )
+
+      }()
+      responseBack.response(result: networkResult)
+    }
+    task.resume()
   }
 }
 

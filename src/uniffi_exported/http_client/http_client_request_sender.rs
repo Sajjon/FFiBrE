@@ -11,5 +11,5 @@ pub trait HTTPClientRequestSender: Send + Sync {
         &self,
         request: NetworkRequest,
         response_back: Arc<dyn NotifyRustFromSwift>,
-    ) -> Result<(), NetworkError>;
+    ) -> Result<(), SwiftSideError>;
 }

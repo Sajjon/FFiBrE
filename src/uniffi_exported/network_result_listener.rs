@@ -12,8 +12,6 @@ impl NetworkResultListener {
         }
     }
 }
-unsafe impl Send for NetworkResultListener {}
-unsafe impl Sync for NetworkResultListener {}
 
 #[export]
 impl NetworkResultListener {

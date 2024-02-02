@@ -1,17 +1,18 @@
-mod gateway_client;
-mod http_client;
+mod internal;
 mod network_error;
+mod uniffi_exported;
 
 pub mod prelude {
-    pub use crate::gateway_client::*;
-    pub use crate::http_client::*;
+    pub(crate) use crate::internal::*;
     pub use crate::network_error::*;
+    pub use crate::uniffi_exported::*;
 
     pub(crate) use serde::{Deserialize, Serialize};
     pub(crate) use serde_json::to_vec;
     pub(crate) use std::collections::HashMap;
     pub(crate) use std::sync::{Arc, Mutex};
-    pub(crate) use uniffi::{export, Enum, Error, Object, Record, include_scaffolding};
+    pub(crate) use tokio::sync::oneshot::{channel, Sender};
+    pub(crate) use uniffi::{export, include_scaffolding, Enum, Error, Object, Record};
 }
 
 pub use prelude::*;

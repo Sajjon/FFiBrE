@@ -1,12 +1,7 @@
 use crate::prelude::*;
 
-#[derive(Object)]
-pub struct GatewayClient {
-    pub(crate) http_client: Arc<HTTPClient>,
-}
-
 impl GatewayClient {
-    pub(crate) async fn make_request<T, U, V, F>(
+    async fn make_request<T, U, V, F>(
         &self,
         path: impl AsRef<str>,
         method: impl AsRef<str>,
@@ -40,7 +35,9 @@ impl GatewayClient {
             })
             .and_then(|s| map(s))
     }
+}
 
+impl GatewayClient {
     pub(crate) async fn post<T, U, V, F>(
         &self,
         path: impl AsRef<str>,
@@ -53,25 +50,5 @@ impl GatewayClient {
         F: Fn(U) -> Result<V, NetworkError>,
     {
         self.make_request(path, "POST", request, map).await
-    }
-}
-
-#[export]
-impl GatewayClient {
-    #[uniffi::constructor]
-    pub fn new(http_client: Arc<HTTPClient>) -> Self {
-        Self { http_client }
-    }
-
-    pub async fn get_xrd_balance_of_account(
-        &self,
-        address: String,
-    ) -> Result<String, NetworkError> {
-        self.post(
-            "state/entity/details",
-            GetEntityDetailsRequest::new(address),
-            parse_xrd_balance_from,
-        )
-        .await
     }
 }

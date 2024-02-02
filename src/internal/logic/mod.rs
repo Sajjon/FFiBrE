@@ -1,9 +1,6 @@
-mod gateway_client;
+mod gateway_client_make_request;
+mod http_client_make_request;
+mod network_result_into_result;
 mod parse_xrd_balance_from_entity_details;
-mod requests;
-mod responses;
 
-pub use gateway_client::*;
 pub(crate) use parse_xrd_balance_from_entity_details::parse_xrd_balance_from;
-pub use requests::*;
-pub use responses::*;

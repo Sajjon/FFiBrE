@@ -159,13 +159,11 @@ extension NetworkRequest {
 		return request
 	}
 }
-
 ```
 
 ## Completion Handler Callback based
 
 ```swift
-
 // Turn `URLSession` into a "network antenna" for Rust
 extension URLSession: FfiOperationHandler {
 	public func executeOperation(
@@ -234,7 +232,6 @@ extension AsyncOperation where T == Data {
 }
 
 extension AsyncOperation: FfiOperationHandler {
-
 	public func executeOperation(
 		operation rustOperation: FfiOperation,
 		listenerRustSide: FfiDataResultListener
@@ -245,10 +242,7 @@ extension AsyncOperation: FfiOperationHandler {
 				let data = try await self.mapToData(result)
 				listenerRustSide.notifyResult(result: .success(value: data))
 			} catch {
-				listenerRustSide.notifyResult(
-					result: .failure(
-						error: ...
-					))
+				listenerRustSide.notifyResult(result: .failure(error: ...))
 			}
 		}
 	}
@@ -267,6 +261,6 @@ let gatewayClient = GatewayClient(
 )
 let balance = try await gatewayClient.getXrdBalanceOfAccount(address: "account_rdx...")
 print("SWIFT ✅ getXrdBalanceOfAccount success, got balance: \(balance) ✅")
+// 🎉
 ```
 
-🎉

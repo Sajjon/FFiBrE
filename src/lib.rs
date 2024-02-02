@@ -130,15 +130,12 @@ impl HTTPClient {
 
 impl HTTPClient {
     async fn make_request(&self, request: NetworkRequest) -> Result<NetworkResponse, NetworkError> {
-        println!("HTTPClient - make_request START");
         let (response_sender, response_receiver) = oneshot::channel();
         let sender_wrapper = OneshotSenderWrapper::new(response_sender);
-        println!("HTTPClient - make_request calling self.request_sender.send");
         self.request_sender
             .send(request, Arc::new(sender_wrapper))
             .unwrap();
 
-        println!("HTTPClient - make_request calling response_receiver.await");
         response_receiver
             .await
             .map_err(|_| NetworkError::FailedToReceiveResponseFromSwift)
@@ -180,7 +177,6 @@ impl GatewayClient {
         U: for<'a> Deserialize<'a>,
         F: Fn(U) -> Result<V, NetworkError>,
     {
-        println!("GatewayClient make_request START");
         let body = to_vec(&request).unwrap();
         let url = format!("https://mainnet.radixdlt.com/{}", path.as_ref());
         let request = NetworkRequest {
@@ -192,9 +188,7 @@ impl GatewayClient {
                 "application/json".to_owned(),
             )]),
         };
-        println!("GatewayClient make_request calling http_client.make_request");
         let response = self.http_client.make_request(request).await;
-        println!("GatewayClient make_request calling http_client.make_request DONE??");
         response
             .and_then(|r| {
                 serde_json::from_slice::<U>(&r.body).map_err(|_| {

@@ -10,15 +10,12 @@ extension NetworkRequest {
     request.httpMethod = self.method
     request.httpBody = self.body
     request.allHTTPHeaderFields = self.headers
-    print("Swift constructed request: \(request)\nfrom: \(self)")
     return request
   }
 }
 
 extension URLSession: HttpClientRequestSender {
   public func send(request: NetworkRequest, responseBack: NotifyRustFromSwift) throws {
-    print("⚡️ START HttpClientRequestSender (URLSession) - send:request:responseBack method")
-    defer { print("⚡️ END HttpClientRequestSender (URLSession) - send:request:responseBack method") }
     let dataTask = try self.dataTask(with: request.urlRequest()) {
       (data: Data?, resp: URLResponse?, err: Error?) in
       let res: NetworkResult = {
@@ -35,23 +32,17 @@ extension URLSession: HttpClientRequestSender {
       }()
       responseBack.response(result: res)
     }
-    print("Created dataTask, now resuming it")
     dataTask.resume()
   }
 }
 
 func test() async throws {
-  print("HELLO WORLD from swift")
-  defer { print("BY BYE from swift") }
 
   let httpClient = HttpClient(requestSender: URLSession.shared)
   let gatewayClient = GatewayClient(httpClient: httpClient)
-  print("🧵🚀Task started")
   let balance = try await gatewayClient.getXrdBalanceOfAccount(
     address: "account_rdx16xlfcpp0vf7e3gqnswv8j9k58n6rjccu58vvspmdva22kf3aplease")
-  print("✅ successfully got balance: \(balance)")
-  print("🧵✅ Task end")
-
+  print("SWIFT ✅ successfully got balance: \(balance) ✅")
 }
 
 try! await test()

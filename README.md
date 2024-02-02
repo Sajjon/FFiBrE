@@ -22,7 +22,10 @@ test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 # Rust side
 
 ```rust,no_run
+/// A handler on the FFI side, which receives request from Rust, executes them
+/// and notifies Rust with the result of the FFI operation.
 #[uniffi::export(with_foreign)]
+pub trait FFIOperationHandler: Send + Sync {
     fn execute_operation(
         &self,
         operation: FFIOperation,
@@ -36,13 +39,51 @@ Where `FFIDataResultListener` is:
 ```rust,no_run
 #[derive(Object)]
 pub struct FFIDataResultListener {
-    sender: Mutex<Option<Sender<FFIOperationResult>>>,
+    sender: Mutex<Option<tokio::oneshot::Sender<FFIOperationResult>>>,
 }
 
 #[export]
 impl FFIDataResultListener {
     fn notify_result(&self, result: FFIOperationResult) {
        self.sender.send(result) // Pseudocode
+    }
+}
+```
+
+And used by `Dispatcher`
+
+```rust,no_run
+#[derive(Object)]
+pub struct FFIOperationDispatcher {
+    /// Handler FFI side, receiving operations from us (Rust side),
+    /// and passes result of the operation back to us (Rust side).
+    pub handler: Arc<dyn FFIOperationHandler>,
+}
+
+impl FFIOperationDispatcher {
+    pub(crate) async fn dispatch(
+        &self,
+        operation: FFIOperation,
+    ) -> Result<Option<Vec<u8>>, NetworkError> {
+        let (sender, receiver) = tokio::oneshot::channel::<FFIOperationResult>();
+        let result_listener = FFIDataResultListener::new(sender);
+
+        // Make request
+        self.handler
+            .execute_operation(
+                // Pass operation to Swift to make
+                operation,
+                // Pass callback, Swift will call `result_listener.notify_result`
+                result_listener.into(),
+            )
+            .map_err(|e| NetworkError::from(e))?;
+
+        // Await response from Swift
+        let response: FFIOperationResult = receiver.await?;
+
+        // Map response from Swift -> Result<Option<Vec<u8>>, NetworkError>,
+        // keeping any errors happening in Swift intact.
+        Result::<Option<Vec<u8>>, SwiftSideError>::from(response).map_err(|e| e.into())
     }
 }
 ```

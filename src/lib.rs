@@ -4,11 +4,10 @@ use std::{
     collections::HashMap,
     sync::{Arc, Mutex},
 };
-use uuid::Uuid;
+use tokio::sync::oneshot;
 
 #[derive(uniffi::Record, Clone, Debug)]
-struct NetworkRequest {
-    id: String,
+pub struct NetworkRequest {
     url: String,
     body: Vec<u8>,
     method: String,
@@ -17,7 +16,6 @@ struct NetworkRequest {
 
 #[derive(uniffi::Record, Clone, Debug)]
 pub struct NetworkResponse {
-    id: String,
     response_code: u16,
     body: Vec<u8>,
 }
@@ -30,16 +28,28 @@ pub enum NetworkError {
     #[error("No XRD balance found in entity state response")]
     NoXRDBalanceFound,
 
+    #[error("Failed to receive response from Swift")]
+    FailedToReceiveResponseFromSwift,
+
+    #[error("URLSession data task request failed, underlying error: {underlying}")]
+    URLSessionDataTaskFailed { underlying: String },
+
     #[error("Unable to JSON deserialize HTTP response body into type: {type_name}")]
     UnableJSONDeserializeHTTPResponseBodyIntoTypeName { type_name: String },
 }
 
 #[uniffi::export]
+pub trait NotifyRustFromSwift: Send + Sync {
+    fn response(&self, result: NetworkResult);
+}
+
+#[uniffi::export(with_foreign)]
 pub trait HTTPClientRequestSender: Send + Sync {
-    /// Called by Rust, Swift side makes call, and then
-    /// Swift side SHOULD call `got_response` method
-    /// on `HTTPClient`
-    fn send(&self, request: NetworkRequest) -> Result<(), NetworkError>;
+    fn send(
+        &self,
+        request: NetworkRequest,
+        response_back: Arc<dyn NotifyRustFromSwift>,
+    ) -> Result<(), NetworkError>;
 }
 
 #[derive(uniffi::Enum, Clone, Debug)]
@@ -54,12 +64,6 @@ impl From<NetworkResult> for Result<NetworkResponse, NetworkError> {
             NetworkResult::Failure { error } => Err(error),
         }
     }
-}
-
-#[derive(uniffi::Record, Clone, Debug)]
-pub struct ResultOfNetworkRequest {
-    request: NetworkRequest,
-    result: NetworkResult,
 }
 
 const XRD: &str = "resource_rdx1tknxxxxxxxxxradxrdxxxxxxxxx009923554798xxxxxxxxxradxrd";
@@ -116,59 +120,42 @@ pub struct HTTPClient {
     request_sender: Arc<dyn HTTPClientRequestSender>,
 }
 
-use tokio::sync::Semaphore;
-
-#[derive(Debug)]
-pub struct Context {
-    pub semaphore: Semaphore,
-    pub result: Arc<Mutex<Option<ResultOfNetworkRequest>>>,
-}
-impl Context {
-    fn new() -> Self {
-        Self {
-            semaphore: Semaphore::new(0),
-            result: Arc::new(Mutex::new(None)),
-        }
-    }
-    fn global() -> &'static Self {
-        CTX.get().expect("Context is not initialized")
-    }
-
-    async fn await_response() -> Result<NetworkResponse, NetworkError> {
-        let ctx = Self::global();
-        drop(ctx.semaphore.acquire().await.unwrap());
-        let res: Result<NetworkResponse, NetworkError> =
-            ctx.result.lock().unwrap().clone().unwrap().result.into();
-        *ctx.result.lock().unwrap() = None;
-        res
-    }
-
-    fn got_result(result: ResultOfNetworkRequest) {
-        let ctx = Self::global();
-        *ctx.result.lock().unwrap() = Some(result);
-        ctx.semaphore.add_permits(1)
-    }
-}
-
-use once_cell::sync::OnceCell;
-static CTX: OnceCell<Context> = OnceCell::new();
-
 #[uniffi::export]
 impl HTTPClient {
     #[uniffi::constructor]
     pub fn new(request_sender: Arc<dyn HTTPClientRequestSender>) -> Self {
         Self { request_sender }
     }
-
-    pub fn got_result_of_network_request(&self, result: ResultOfNetworkRequest) {
-        Context::got_result(result)
-    }
 }
 
 impl HTTPClient {
     async fn make_request(&self, request: NetworkRequest) -> Result<NetworkResponse, NetworkError> {
-        self.request_sender.send(request).unwrap();
-        Context::await_response().await
+        let (response_sender, response_receiver) = oneshot::channel();
+        let sender_wrapper = OneshotSenderWrapper::new(response_sender);
+        self.request_sender
+            .send(request, Arc::new(sender_wrapper))
+            .unwrap();
+        response_receiver
+            .await
+            .map_err(|_| NetworkError::FailedToReceiveResponseFromSwift)
+            .and_then(|r| r.into())
+    }
+}
+
+#[derive(uniffi::Object)]
+pub struct OneshotSenderWrapper(Mutex<Option<oneshot::Sender<NetworkResult>>>);
+impl OneshotSenderWrapper {
+    pub fn new(sender: oneshot::Sender<NetworkResult>) -> Self {
+        Self(Mutex::new(Some(sender)))
+    }
+}
+unsafe impl Send for OneshotSenderWrapper {}
+unsafe impl Sync for OneshotSenderWrapper {}
+
+impl NotifyRustFromSwift for OneshotSenderWrapper {
+    fn response(&self, result: NetworkResult) {
+        let sender = self.0.lock().unwrap().take().unwrap();
+        sender.send(result).unwrap();
     }
 }
 
@@ -192,7 +179,6 @@ impl GatewayClient {
         let body = to_vec(&request).unwrap();
         let url = format!("https://mainnet.radixdlt.com/{}", path.as_ref());
         let request = NetworkRequest {
-            id: uuid::Uuid::new_v4().to_string(),
             url,
             body,
             method: method.as_ref().to_owned(),
@@ -232,7 +218,6 @@ impl GatewayClient {
 impl GatewayClient {
     #[uniffi::constructor]
     pub fn new(http_client: Arc<HTTPClient>) -> Self {
-        CTX.set(Context::new()).unwrap();
         Self { http_client }
     }
 

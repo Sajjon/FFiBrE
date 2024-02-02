@@ -1,6 +1,19 @@
 import Foundation
 import network
 
+extension FfiOperation {
+  var asNetworkRequest: NetworkRequest {
+    guard case let .networking(rustNetworkRequest) = self else {
+      fatalError(
+        """
+        Should never happen - Rust side should have queried `supportedOperations()` which states we only support `.networking` request, so no other operation kind should have been sent.
+        """
+      )
+    }
+    return rustNetworkRequest
+  }
+}
+
 public final class AsyncOperation<T> {
   typealias Operation = (FfiOperation) async throws -> T
   typealias MapToData = (T) async throws -> Data
@@ -55,7 +68,6 @@ extension AsyncOperation: FfiOperationHandler {
       }
     }
   }
-
 }
 
 extension NetworkRequest {
@@ -92,15 +104,8 @@ extension URLSession: FfiOperationHandler {
     operation rustOperation: FfiOperation,
     listenerRustSide: FfiDataResultListener
   ) throws {
-    guard case let .networking(rustNetworkRequest) = rustOperation else {
-      fatalError(
-        """
-        Should never happen - Rust side should have queried `supportedOperations()` which states we only support `.networking` request, so no other operation kind should have been sent.
-        """
-      )
-    }
     return try makeNetworkRequest(
-      request: rustNetworkRequest,
+      request: rustOperation.asNetworkRequest,
       listenerRustSide: listenerRustSide
     )
   }
@@ -161,31 +166,25 @@ extension URLSession {
 }
 
 func test() async throws {
-  // Init `[Rust]GatewayClient` by passing `[Swift]URLSession` as `[Rust]FfiOperationHandler`
-  // let gatewayClient = GatewayClient(networkAntenna: URLSession.shared)
-  let gatewayClient = GatewayClient(
-    networkAntenna: AsyncOperation(
-      operation: { rustOperation in
-        guard case let .networking(rustNetworkRequest) = rustOperation else {
-          fatalError(
-            """
-            Should never happen - Rust side should have queried `supportedOperations()` which states we only support `.networking` request, so no other operation kind should have been sent.
-            """
-          )
-        }
+  let urlSession = URLSession.shared
 
-        return try await URLSession.shared.data(for: rustNetworkRequest.urlRequest()).0
-      })
+  let clientCompletionCallbackBased = GatewayClient(
+    networkAntenna: urlSession
+  )
+
+  let clientAsyncBased = GatewayClient(
+    networkAntenna: AsyncOperation {
+      try await urlSession.data(for: $0.asNetworkRequest.urlRequest()).0
+    }
   )
 
   // Call async method in Rust land from Swift!
+  let address = "account_rdx16xlfcpp0vf7e3gqnswv8j9k58n6rjccu58vvspmdva22kf3aplease"
   do {
-
-    let balance = try await gatewayClient.getXrdBalanceOfAccount(
-      address: "account_rdx16xlfcpp0vf7e3gqnswv8j9k58n6rjccu58vvspmdva22kf3aplease"
-    )
-    // Print result, if successful
-    print("SWIFT ✅ getXrdBalanceOfAccount success, got balance: \(balance) ✅")
+    var balance = try await clientCompletionCallbackBased.getXrdBalanceOfAccount(address: address)
+    print("SWIFT ✅ completionCallbackBased balance: \(balance) ✅")
+    balance = try await clientAsyncBased.getXrdBalanceOfAccount(address: address)
+    print("SWIFT ✅ clientAsyncBased balance: \(balance) ✅")
   } catch {
     print("SWIFT ❌ getXrdBalanceOfAccount failed, error: \(String(describing: error))")
   }

@@ -15,10 +15,14 @@ cargo test
 Which should output something like:
 
 ```sh
-SWIFT ✅ getXrdBalanceOfAccount success, got balance: 890.8 ✅
+running 1 test
+    Finished dev [unoptimized + debuginfo] target(s) in 0.21s
+SWIFT ✅ completionCallbackBased balance: 890.88637929049 ✅
+SWIFT ✅ clientAsyncBased balance: 890.88637929049 ✅
 test uniffi_foreign_language_testcase_test_swift ... ok
 
-test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.07s
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.48s
+
 ```
 
 # Rust side
@@ -137,7 +141,7 @@ impl GatewayClient {
 
 # Swift Side
 
-## Impl trait `FfiOperationHandler`
+Translate NetworkRequest -> `URLRequest`
 
 ```swift
 import Foundation
@@ -153,6 +157,12 @@ extension NetworkRequest {
 		return request
 	}
 }
+
+```
+
+## Completion Handler Callback based
+
+```swift
 
 // Turn `URLSession` into a "network antenna" for Rust
 extension URLSession: FfiOperationHandler {
@@ -186,7 +196,7 @@ extension URLSession: FfiOperationHandler {
 
 Now ready to be used!
 
-## Usage
+### Usage
 
 ```swift
 let gatewayClient = GatewayClient(networkAntenna: URLSession.shared)
@@ -197,3 +207,64 @@ let balance = try await gatewayClient.getXrdBalanceOfAccount(
 // Print result, if successful
 print("SWIFT ✅ getXrdBalanceOfAccount success, got balance: \(balance) ✅")
 ```
+
+## Async based
+
+But it gets better! We can perform an async call in a Swift `Task` and let a holder of it implement the `FfiOperationHandler` trait!
+
+```swift
+public final class AsyncOperation<T> {
+	typealias Operation = (FfiOperation) async throws -> T
+	typealias MapToData = (T) async throws -> Data
+
+	private var task: Task<Void, Never>?
+
+	let operation: Operation
+	let mapToData: MapToData
+}
+
+extension AsyncOperation where T == Data {
+	convenience init(
+		operation: @escaping Operation
+	) {
+		self.init(operation: operation) { $0 }
+	}
+
+}
+
+extension AsyncOperation: FfiOperationHandler {
+
+	public func executeOperation(
+		operation rustOperation: FfiOperation,
+		listenerRustSide: FfiDataResultListener
+	) throws {
+		self.task = Task {
+			do {
+				let result = try await self.operation(rustOperation)
+				let data = try await self.mapToData(result)
+				listenerRustSide.notifyResult(result: .success(value: data))
+			} catch {
+				listenerRustSide.notifyResult(
+					result: .failure(
+						error: ...
+					))
+			}
+		}
+	}
+}
+```
+
+Now ready to be used!
+
+### Usage
+
+```swift
+let gatewayClient = GatewayClient(
+    networkAntenna: AsyncOperation {
+      try await urlSession.data(for: $0.asNetworkRequest.urlRequest()).0
+    }
+)
+balance = try await gatewayClient.getXrdBalanceOfAccount(address: "...")
+```
+
+🎉

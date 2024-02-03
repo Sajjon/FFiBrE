@@ -1,6 +1,6 @@
 use crate::prelude::*;
 
-impl FFIOperationDispatcher {
+impl<L: ResultListener> FFIOperationDispatcher<L> {
     pub(crate) async fn dispatch(
         &self,
         operation: FFIOperation,

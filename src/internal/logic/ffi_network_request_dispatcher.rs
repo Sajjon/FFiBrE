@@ -1,11 +1,13 @@
 use crate::prelude::*;
 
 pub struct FFINetworkRequestDispatcher {
-    pub dispatcher: FFIOperationDispatcher,
+    pub dispatcher: FFIOperationDispatcher<FFINetworkingResultListener>,
 }
 
 impl FFINetworkRequestDispatcher {
-    pub fn with_dispatcher(dispatcher: FFIOperationDispatcher) -> Self {
+    pub fn with_dispatcher(
+        dispatcher: FFIOperationDispatcher<FFINetworkingResultListener>,
+    ) -> Self {
         Self { dispatcher }
     }
     pub fn new(network_antenna: Arc<dyn FFINetworkingHandler>) -> Self {

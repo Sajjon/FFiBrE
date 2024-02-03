@@ -6,4 +6,5 @@ use crate::prelude::*;
 #[derive(Clone, Debug, PartialEq, Eq, enum_as_inner::EnumAsInner)]
 pub enum FFIOperationOk {
     Networking { response: NetworkResponse },
+    FileIOWrite { response: FFIFileIOWriteResponse },
 }

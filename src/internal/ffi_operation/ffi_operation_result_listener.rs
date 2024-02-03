@@ -1,5 +1,7 @@
 use crate::prelude::*;
 
+pub trait ResultListener: From<FFIOperationResultListener> {}
+
 /// An object representing that Rust is listening on the result of an operation
 /// carried out by FFI (Swift-side). When FFI side has finished the operation,
 /// either successfully or with failure, it passes back this result to Rust
@@ -8,6 +10,7 @@ pub struct FFIOperationResultListener {
     sender: Mutex<Option<Sender<FFIOperationResult>>>,
 }
 
+impl ResultListener for FFIOperationResultListener {}
 impl FFIOperationResultListener {
     pub(crate) fn new(sender: Sender<FFIOperationResult>) -> Self {
         Self {

@@ -3,6 +3,7 @@ use crate::prelude::*;
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum FFIOperationKind {
     Networking,
+    FileIOWrite,
 }
 
 pub trait HasFFIOperationKindInstance {
@@ -15,17 +16,17 @@ impl HasFFIOperationKindInstance for NetworkRequest {
     }
 }
 
-
 #[derive(Clone, Debug, PartialEq, Eq, enum_as_inner::EnumAsInner)]
 pub enum FFIOperation {
     Networking { request: NetworkRequest },
+    FileIOWrite { request: FFIFileIOWriteRequest },
 }
 
 impl HasFFIOperationKindInstance for FFIOperation {
     fn operation_kind(&self) -> FFIOperationKind {
         match self {
             FFIOperation::Networking { request: _ } => FFIOperationKind::Networking,
+            FFIOperation::FileIOWrite { request: _ } => FFIOperationKind::FileIOWrite,
         }
     }
 }
-

@@ -7,7 +7,7 @@ use crate::prelude::*;
 /// This is a trait - a protocol - which should be implemented
 /// FFI side (Swift side), and then Rust can ask it to execute certain
 /// operations, e.g. Network calls.
-pub trait FFIOperationHandler: Send + Sync {
+pub trait FFIOperationHandler<L: ResultListener>: Send + Sync {
     /// A set of supported operations by an [`FFIOperationHandler`],
     /// Rust MUST NOT send any operation to the handler before,
     /// asking it if it supports the operation kind.
@@ -20,6 +20,6 @@ pub trait FFIOperationHandler: Send + Sync {
     fn execute_operation(
         &self,
         operation: FFIOperation,
-        listener_rust_side: FFIOperationResultListener,
+        listener_rust_side: L,
     ) -> Result<(), SwiftSideError>;
 }

@@ -2,16 +2,22 @@ use crate::prelude::*;
 
 #[derive(Object)]
 pub struct FFINetworkingResultListener {
-    result_listener: FFIOperationResultListener,
+    result_listener: FFIOperationResultListener<FFINetworkResult>,
 }
-impl ResultListener for FFINetworkingResultListener {}
-impl From<FFIOperationResultListener> for FFINetworkingResultListener {
-    fn from(value: FFIOperationResultListener) -> Self {
+impl ResultListener for FFINetworkingResultListener {
+    type OpResult = FFINetworkResult;
+    type Request = NetworkRequest;
+    type Response = NetworkResponse;
+}
+impl From<FFIOperationResultListener<FFINetworkResult>> for FFINetworkingResultListener {
+    fn from(value: FFIOperationResultListener<FFINetworkResult>) -> Self {
         Self::with_result_listener(value)
     }
 }
 impl FFINetworkingResultListener {
-    pub fn with_result_listener(result_listener: FFIOperationResultListener) -> Self {
+    pub fn with_result_listener(
+        result_listener: FFIOperationResultListener<FFINetworkResult>,
+    ) -> Self {
         Self { result_listener }
     }
 }

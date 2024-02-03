@@ -1,20 +1,21 @@
 use crate::prelude::*;
 
+impl FFINetworkRequestDispatcher {
+    pub(crate) async fn dispatch_network_request(
+        &self,
+        request: NetworkRequest,
+    ) -> Result<NetworkResponse, NetworkError> {
+        self.dispatcher.dispatch(request).await
+    }
+}
+
 impl<L: ResultListener> FFIOperationDispatcher<L> {
     pub(crate) async fn dispatch(
         &self,
-        operation: FFIOperation,
-    ) -> Result<FFIOperationOk, NetworkError> {
-        if !self
-            .handler
-            .supported_operations()
-            .contains(&operation.operation_kind())
-        {
-            panic!("Unsupported operation: {:?}", operation)
-        }
-
+        operation: L::Request,
+    ) -> Result<L::Response, NetworkError> {
         // Underlying tokio channel used to get result from Swift back to Rust.
-        let (sender, receiver) = channel::<FFIOperationResult>();
+        let (sender, receiver) = channel::<L::OpResult>();
 
         // Our callback we pass to Swift
         let result_listener = FFIOperationResultListener::new(sender);
@@ -34,8 +35,7 @@ impl<L: ResultListener> FFIOperationDispatcher<L> {
             error: RustSideError::FailedToReceiveResponseFromSwift,
         })?;
 
-        // Map response from Swift -> Result<Option<Vec<u8>>, NetworkError>,
-        // keeping any errors happening in Swift intact.
-        Result::<FFIOperationOk, SwiftSideError>::from(response).map_err(|e| e.into())
+        // Result::<L::Response, SwiftSideError>::from(response).map_err(|e| e.into())
+        response.into().map_err(|e| e.into())
     }
 }

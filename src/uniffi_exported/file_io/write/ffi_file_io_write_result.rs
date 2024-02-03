@@ -5,3 +5,13 @@ pub enum FFIFileIOWriteResult {
     Success { value: FFIFileIOWriteResponse },
     Failure { error: SwiftSideError },
 }
+
+impl FFIResult<FFIFileIOWriteResponse> for FFIFileIOWriteResult {}
+impl Into<Result<FFIFileIOWriteResponse, SwiftSideError>> for FFIFileIOWriteResult {
+    fn into(self) -> Result<FFIFileIOWriteResponse, SwiftSideError> {
+        match self {
+            Self::Success { value } => Ok(value),
+            Self::Failure { error } => Err(error),
+        }
+    }
+}

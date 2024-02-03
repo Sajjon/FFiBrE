@@ -13,17 +13,14 @@ pub trait FFIFileIOWriteHandler: FFIOperationHandler<FFIFileIOWriteResultListene
     ) -> Result<(), SwiftSideError>;
 }
 
-impl<U: FFIFileIOWriteHandler> FFIOperationHandler<FFIFileIOWriteResultListener> for U {
-    fn supported_operations(&self) -> Vec<FFIOperationKind> {
-        vec![FFIOperationKind::FileIOWrite]
-    }
 
+
+impl<U: FFIFileIOWriteHandler> FFIOperationHandler<FFIFileIOWriteResultListener> for U {
     fn execute_operation(
         &self,
-        operation: FFIOperation,
+        operation: <FFIFileIOWriteResultListener as ResultListener>::Request,
         listener_rust_side: FFIFileIOWriteResultListener,
     ) -> Result<(), SwiftSideError> {
-        let request = operation.into_file_io_write().expect("IO write request");
-        self.execute_file_io_write_request(request, listener_rust_side.into())
+        self.execute_file_io_write_request(operation, listener_rust_side.into())
     }
 }

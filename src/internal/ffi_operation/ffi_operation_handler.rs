@@ -8,10 +8,6 @@ use crate::prelude::*;
 /// FFI side (Swift side), and then Rust can ask it to execute certain
 /// operations, e.g. Network calls.
 pub trait FFIOperationHandler<L: ResultListener>: Send + Sync {
-    /// A set of supported operations by an [`FFIOperationHandler`],
-    /// Rust MUST NOT send any operation to the handler before,
-    /// asking it if it supports the operation kind.
-    fn supported_operations(&self) -> Vec<FFIOperationKind>;
 
     /// Rust will tell the handler to execute `operation` by calling this
     /// function, which a concrete type FFI side (Swift side) has implemented.
@@ -19,7 +15,7 @@ pub trait FFIOperationHandler<L: ResultListener>: Send + Sync {
     /// passes back the result using the `listener_rust_side` callback.
     fn execute_operation(
         &self,
-        operation: FFIOperation,
+        operation: L::Request,
         listener_rust_side: L,
     ) -> Result<(), SwiftSideError>;
 }

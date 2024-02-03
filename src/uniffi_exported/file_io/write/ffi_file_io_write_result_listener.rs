@@ -2,16 +2,22 @@ use crate::prelude::*;
 
 #[derive(Object)]
 pub struct FFIFileIOWriteResultListener {
-    result_listener: FFIOperationResultListener,
+    result_listener: FFIOperationResultListener<FFIFileIOWriteResult>,
 }
-impl ResultListener for FFIFileIOWriteResultListener {}
-impl From<FFIOperationResultListener> for FFIFileIOWriteResultListener {
-    fn from(value: FFIOperationResultListener) -> Self {
+impl ResultListener for FFIFileIOWriteResultListener {
+    type OpResult = FFIFileIOWriteResult;
+    type Request = FFIFileIOWriteRequest;
+    type Response = FFIFileIOWriteResponse;
+}
+impl From<FFIOperationResultListener<FFIFileIOWriteResult>> for FFIFileIOWriteResultListener {
+    fn from(value: FFIOperationResultListener<FFIFileIOWriteResult>) -> Self {
         Self::with_result_listener(value)
     }
 }
 impl FFIFileIOWriteResultListener {
-    pub fn with_result_listener(result_listener: FFIOperationResultListener) -> Self {
+    pub fn with_result_listener(
+        result_listener: FFIOperationResultListener<FFIFileIOWriteResult>,
+    ) -> Self {
         Self { result_listener }
     }
 }

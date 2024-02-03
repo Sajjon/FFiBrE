@@ -14,16 +14,11 @@ pub trait FFINetworkingHandler: FFIOperationHandler<FFINetworkingResultListener>
 }
 
 impl<U: FFINetworkingHandler> FFIOperationHandler<FFINetworkingResultListener> for U {
-    fn supported_operations(&self) -> Vec<FFIOperationKind> {
-        vec![FFIOperationKind::Networking]
-    }
-
     fn execute_operation(
         &self,
-        operation: FFIOperation,
+        operation: <FFINetworkingResultListener as ResultListener>::Request,
         listener_rust_side: FFINetworkingResultListener,
     ) -> Result<(), SwiftSideError> {
-        let request = operation.into_networking().expect("Network request");
-        self.execute_network_request(request, listener_rust_side.into())
+        self.execute_network_request(operation, listener_rust_side.into())
     }
 }

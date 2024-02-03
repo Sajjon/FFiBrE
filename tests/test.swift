@@ -136,7 +136,16 @@ where Request == NetworkRequest, Intermediary == (Data, URLResponse), Response =
   }
 }
 
+func test_write_file() async throws {
+  print("🚀 SWIFT 'test_write_file' start")
+  defer { print("🏁 SWIFT 'test_write_file' done") }
+  try "Hej".write(toFile: "safe_to_delete.txt", atomically: false, encoding: .utf8)
+}
+
 func test() async throws {
+  print("🚀 SWIFT 'test' start")
+  defer { print("🏁 SWIFT 'test' done") }
+  try await test_write_file()
   let urlSession = URLSession.shared
 
   let clientCompletionCallbackBased = GatewayClient(

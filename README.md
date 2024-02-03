@@ -1,4 +1,6 @@
-# UniFFI "async" operations in FFI invoked from Rust
+# FFiBre - FFI BridgE - async bridge Swift<>Rust PoC
+
+FFiBRe pronounced "fibre" is a **Proof-of-Concept** of bridging between Swift and Rust for async methods.
 
 Showcase of FFI side (Swift side) - executing a Network request called from Rust, implemented with [tokio::oneshot](https://docs.rs/tokio/latest/tokio/sync/oneshot/fn.channel.html).
 
@@ -145,7 +147,7 @@ Translate NetworkRequest -> `URLRequest`
 
 ```swift
 import Foundation
-import network
+import ffibre
 
 // Convert `[Rust]NetworkRequest` to `[Swift]URLRequest`
 extension NetworkRequest {
@@ -157,13 +159,11 @@ extension NetworkRequest {
 		return request
 	}
 }
-
 ```
 
 ## Completion Handler Callback based
 
 ```swift
-
 // Turn `URLSession` into a "network antenna" for Rust
 extension URLSession: FfiOperationHandler {
 	public func executeOperation(
@@ -202,9 +202,8 @@ Now ready to be used!
 let gatewayClient = GatewayClient(networkAntenna: URLSession.shared)
 // Call async method in Rust land from Swift!
 let balance = try await gatewayClient.getXrdBalanceOfAccount(
-	address: "account_rdx16xlfcpp0vf7e3gqnswv8j9k58n6rjccu58vvspmdva22kf3aplease"
+	address: "account_rdx..."
 )
-// Print result, if successful
 print("SWIFT ✅ getXrdBalanceOfAccount success, got balance: \(balance) ✅")
 ```
 
@@ -233,7 +232,6 @@ extension AsyncOperation where T == Data {
 }
 
 extension AsyncOperation: FfiOperationHandler {
-
 	public func executeOperation(
 		operation rustOperation: FfiOperation,
 		listenerRustSide: FfiDataResultListener
@@ -244,10 +242,7 @@ extension AsyncOperation: FfiOperationHandler {
 				let data = try await self.mapToData(result)
 				listenerRustSide.notifyResult(result: .success(value: data))
 			} catch {
-				listenerRustSide.notifyResult(
-					result: .failure(
-						error: ...
-					))
+				listenerRustSide.notifyResult(result: .failure(error: ...))
 			}
 		}
 	}
@@ -264,7 +259,8 @@ let gatewayClient = GatewayClient(
       try await urlSession.data(for: $0.asNetworkRequest.urlRequest()).0
     }
 )
-balance = try await gatewayClient.getXrdBalanceOfAccount(address: "...")
+let balance = try await gatewayClient.getXrdBalanceOfAccount(address: "account_rdx...")
+print("SWIFT ✅ getXrdBalanceOfAccount success, got balance: \(balance) ✅")
+// 🎉
 ```
 
-🎉

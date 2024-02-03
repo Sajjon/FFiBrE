@@ -1,5 +1,5 @@
 import Foundation
-import network
+import ffibre
 
 extension NetworkResponse {
   init(data: Data, urlResponse: URLResponse) {

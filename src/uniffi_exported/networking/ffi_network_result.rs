@@ -10,7 +10,6 @@ pub enum FFINetworkResult {
     Failure { error: SwiftSideError },
 }
 
-impl FFIResult<NetworkResponse> for FFINetworkResult {}
 impl Into<Result<NetworkResponse, SwiftSideError>> for FFINetworkResult {
     fn into(self) -> Result<NetworkResponse, SwiftSideError> {
         match self {

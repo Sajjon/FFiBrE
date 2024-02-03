@@ -6,7 +6,6 @@ pub enum FFIFileIOWriteResult {
     Failure { error: SwiftSideError },
 }
 
-impl FFIResult<FFIFileIOWriteResponse> for FFIFileIOWriteResult {}
 impl Into<Result<FFIFileIOWriteResponse, SwiftSideError>> for FFIFileIOWriteResult {
     fn into(self) -> Result<FFIFileIOWriteResponse, SwiftSideError> {
         match self {

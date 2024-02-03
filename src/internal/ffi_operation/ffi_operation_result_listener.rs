@@ -2,7 +2,7 @@ use crate::prelude::*;
 
 pub trait ResultListener: From<FFIOperationResultListener<Self::OpResult>> {
     type Request;
-    type OpResult: FFIResult<Self::Response>;
+    type OpResult: Into<Result<Self::Response, SwiftSideError>>;
     type Response;
 }
 

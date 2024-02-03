@@ -8,8 +8,8 @@ pub trait FFINetworkingHandler: FFIOperationHandler {
     /// passes back the result using the `listener_rust_side` callback.
     fn execute_network_request(
         &self,
-        operation: NetworkRequest,
-        listener_rust_side: Arc<FFIOperationResultListener>,
+        request: NetworkRequest,
+        listener_rust_side: Arc<FFINetworkingResultListener>,
     ) -> Result<(), SwiftSideError>;
 }
 
@@ -21,9 +21,12 @@ impl<U: FFINetworkingHandler> FFIOperationHandler for U {
     fn execute_operation(
         &self,
         operation: FFIOperation,
-        listener_rust_side: Arc<FFIOperationResultListener>,
+        listener_rust_side: FFIOperationResultListener,
     ) -> Result<(), SwiftSideError> {
         let request = operation.into_networking().expect("Network request");
-        self.execute_network_request(request, listener_rust_side)
+        self.execute_network_request(
+            request,
+            FFINetworkingResultListener::with_result_listener(listener_rust_side).into(),
+        )
     }
 }

@@ -20,6 +20,6 @@ pub trait FFIOperationHandler: Send + Sync {
     fn execute_operation(
         &self,
         operation: FFIOperation,
-        listener_rust_side: Arc<FFIOperationResultListener>,
+        listener_rust_side: FFIOperationResultListener,
     ) -> Result<(), SwiftSideError>;
 }

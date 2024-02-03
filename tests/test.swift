@@ -14,7 +14,7 @@ extension FfiOperation {
   }
 }
 
-extension FfiOperationResult {
+extension FfiNetworkResult {
   static func with(
     to request: NetworkRequest,
     data: Data?,
@@ -62,13 +62,12 @@ extension FfiOperationResult {
     }
 
     return .success(
-      value: FfiOperationOk.networking(
-        response: NetworkResponse(
-          statusCode: statusCode() ?? 200,
-          url: httpUrlResponse.url.map { $0.absoluteString } ?? request.url,
-          headers: (httpUrlResponse.allHeaderFields as? [String: String]) ?? [:],
-          body: data
-        ))
+      value: NetworkResponse(
+        statusCode: statusCode() ?? 200,
+        url: httpUrlResponse.url.map { $0.absoluteString } ?? request.url,
+        headers: (httpUrlResponse.allHeaderFields as? [String: String]) ?? [:],
+        body: data
+      )
     )
   }
 }
@@ -151,14 +150,14 @@ extension NetworkRequest {
 // Conform `[Swift]URLSession` to `[Rust]FfiNetworkingHandler`
 extension URLSession: FfiNetworkingHandler {
   public func executeNetworkRequest(
-    operation rustRequest: NetworkRequest,
-    listenerRustSide: FfiOperationResultListener
+    request rustRequest: NetworkRequest,
+    listenerRustSide: FfiNetworkingResultListener
   ) throws {
     guard let url = URL(string: rustRequest.url) else {
       throw SwiftSideError.FailedToCreateUrlFrom(string: rustRequest.url)
     }
     let task = dataTask(with: rustRequest.urlRequest(url: url)) { data, urlResponse, error in
-      let result = FfiOperationResult.with(
+      let result = FfiNetworkResult.with(
         to: rustRequest,
         data: data,
         urlResponse: urlResponse,

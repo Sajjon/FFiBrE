@@ -14,62 +14,122 @@ extension FfiOperation {
   }
 }
 
-public final class AsyncOperation<T> {
-  typealias Operation = (FfiOperation) async throws -> T
-  typealias MapToData = (T) async throws -> Data
+extension FfiOperationResult {
+  static func with(
+    to request: NetworkRequest,
+    data: Data?,
+    urlResponse: URLResponse?,
+    error: Swift.Error?
+  ) -> Self {
+    func reason() -> String? {
+      error.map { String(describing: $0) } ?? nil
+    }
+    func message() -> String? {
+      data.map { String(data: $0, encoding: .utf8) } ?? nil
+    }
+    func statusCode() -> UInt16? {
+      urlResponse.map { $0 as? HTTPURLResponse ?? nil }?.map { UInt16($0.statusCode) } ?? nil
+    }
 
-  private var task: Task<Void, Never>?
+    guard let urlResponse else {
+      return .failure(
+        error: .RequestFailed(
+          statusCode: statusCode(),
+          urlSessionUnderlyingError: reason(),
+          errorMessageFromGateway: message()
+        )
+      )
+    }
 
-  let supportedOperationKinds: [FfiOperationKind]
-  let operation: Operation
-  let mapToData: MapToData
+    guard let httpUrlResponse = urlResponse as? HTTPURLResponse else {
+      return .failure(
+        error: .UnableToCastUrlResponseToHttpUrlResponse
+      )
+    }
 
-  init(
-    supportedOperationKinds: [FfiOperationKind] = [.networking],
-    operation: @escaping Operation,
-    mapToData: @escaping MapToData
-  ) {
-    self.supportedOperationKinds = supportedOperationKinds
-    self.operation = operation
-    self.mapToData = mapToData
+    if error != nil {
+      return .failure(
+        error: .RequestFailed(
+          statusCode: statusCode(),
+          urlSessionUnderlyingError: message(),
+          errorMessageFromGateway: message()
+        )
+      )
+    }
+
+    guard let data else {
+      fatalError("Should not happen, error was nil, so we should have data.")
+    }
+
+    return .success(
+      value: FfiOperationOk.networking(
+        response: NetworkResponse(
+          statusCode: statusCode() ?? 200,
+          url: httpUrlResponse.url.map { $0.absoluteString } ?? request.url,
+          headers: (httpUrlResponse.allHeaderFields as? [String: String]) ?? [:],
+          body: data
+        ))
+    )
   }
+}
+
+/*
+public final class AsyncOperation<T> {
+	typealias Operation = (FfiOperation) async throws -> T
+	typealias MapToData = (T) async throws -> Data
+
+	private var task: Task<Void, Never>?
+
+	let supportedOperationKinds: [FfiOperationKind]
+	let operation: Operation
+	let mapToData: MapToData
+
+	init(
+		supportedOperationKinds: [FfiOperationKind] = [.networking],
+		operation: @escaping Operation,
+		mapToData: @escaping MapToData
+	) {
+		self.supportedOperationKinds = supportedOperationKinds
+		self.operation = operation
+		self.mapToData = mapToData
+	}
 }
 
 extension AsyncOperation where T == Data {
-  convenience init(
-    supportedOperationKinds: [FfiOperationKind] = [.networking],
-    operation: @escaping Operation
-  ) {
-    self.init(supportedOperationKinds: supportedOperationKinds, operation: operation) { $0 }
-  }
+	convenience init(
+		supportedOperationKinds: [FfiOperationKind] = [.networking],
+		operation: @escaping Operation
+	) {
+		self.init(supportedOperationKinds: supportedOperationKinds, operation: operation) { $0 }
+	}
 
 }
 
-extension AsyncOperation: FfiOperationHandler {
-  public func supportedOperations() -> [FfiOperationKind] {
-    supportedOperationKinds
-  }
+extension AsyncOperation: FFINetworkRequestHandler {
+	public func supportedOperations() -> [FfiOperationKind] {
+		supportedOperationKinds
+	}
 
-  public func executeOperation(
-    operation rustOperation: FfiOperation,
-    listenerRustSide: FfiDataResultListener
-  ) throws {
-    self.task = Task {
-      do {
-        let result = try await self.operation(rustOperation)
-        let data = try await self.mapToData(result)
-        listenerRustSide.notifyResult(result: .success(value: data))
-      } catch {
-        // wrong error kind....
-        listenerRustSide.notifyResult(
-          result: .failure(
-            error: .UnableToCastUrlResponseToHttpUrlResponse
-          ))
-      }
-    }
-  }
+	public func executeNetworkRequest(
+		request rustNetworkRequest: NetworkRequest,
+		listenerRustSide: FfiDataResultListener
+	) throws {
+		self.task = Task {
+			do {
+				let result = try await self.operation(.Networking())
+				let data = try await self.mapToData(result)
+				listenerRustSide.notifyResult(result: .success(value: data))
+			} catch {
+				// wrong error kind....
+				listenerRustSide.notifyResult(
+					result: .failure(
+						error: .UnableToCastUrlResponseToHttpUrlResponse
+					))
+			}
+		}
+	}
 }
-
+*/
 extension NetworkRequest {
   // Convert `[Rust]NetworkRequest` to `[Swift]URLRequest`
   func urlRequest(url: URL) -> URLRequest {
@@ -88,35 +148,14 @@ extension NetworkRequest {
   }
 }
 
-extension HTTPURLResponse {
-  var ok: Bool {
-    (200...299).contains(statusCode)
-  }
-}
-
 // Conform `[Swift]URLSession` to `[Rust]FfiOperationHandler`
-extension URLSession: FfiOperationHandler {
+extension URLSession: FfiNetworkRequestHandler {
   public func supportedOperations() -> [FfiOperationKind] {
     [.networking]
   }
 
-  public func executeOperation(
-    operation rustOperation: FfiOperation,
-    listenerRustSide: FfiDataResultListener
-  ) throws {
-    return try makeNetworkRequest(
-      request: rustOperation.asNetworkRequest,
-      listenerRustSide: listenerRustSide
-    )
-  }
-}
-
-extension URLSession {
-
-  // Make a network call using this URLSession, pass back result to Rust via
-  // callback.
-  func makeNetworkRequest(
-    request rustRequest: NetworkRequest,
+  public func executeNetworkRequest(
+    operation rustRequest: NetworkRequest,
     listenerRustSide: FfiDataResultListener
   ) throws {
     let urlString = rustRequest.url
@@ -124,40 +163,14 @@ extension URLSession {
       throw SwiftSideError.FailedToCreateUrlFrom(string: urlString)
     }
     let swiftURLRequest = rustRequest.urlRequest(url: url)
-
-    // Construct `[Swift]URLSessionDataTask` with `[Swift]URLRequest`
     let task = dataTask(with: swiftURLRequest) { data, urlResponse, error in
-      // Inside response callback, called by URLSession when URLSessionDataTask finished
-      // translate triple `[Swift](data, urlResponse, error)` -> `[Rust]NetworkResult`
-
-      // Build result of operation, by inspecting passed triple.
-      let networkResult: FfiOperationResult = {
-        guard let httpResponse = urlResponse as? HTTPURLResponse else {
-          return .failure(
-            error: .UnableToCastUrlResponseToHttpUrlResponse
-          )
-        }
-        let statusCode = UInt16(httpResponse.statusCode)
-        guard httpResponse.ok else {
-          let urlSessionUnderlyingError = error.map { String(describing: $0) }
-          let errorMessageFromGateway = data.map { String(data: $0, encoding: .utf8) ?? nil } ?? nil
-          return .failure(
-            error: .RequestFailed(
-              statusCode: statusCode,
-              urlSessionUnderlyingError: urlSessionUnderlyingError,
-              errorMessageFromGateway: errorMessageFromGateway
-            )
-          )
-        }
-
-        return .success(
-          value: data
-        )
-
-      }()
-
-      // Notify Rust side that network request has finished by passing `[Rust]FfiOperationResult`
-      listenerRustSide.notifyResult(result: networkResult)
+      let result = FfiOperationResult.with(
+        to: rustRequest,
+        data: data,
+        urlResponse: urlResponse,
+        error: error
+      )
+      listenerRustSide.notifyResult(result: result)
     }
 
     // Start `[Swift]URLSessionDataTask`
@@ -172,19 +185,19 @@ func test() async throws {
     networkAntenna: urlSession
   )
 
-  let clientAsyncBased = GatewayClient(
-    networkAntenna: AsyncOperation {
-      try await urlSession.data(for: $0.asNetworkRequest.urlRequest()).0
-    }
-  )
+  // let clientAsyncBased = GatewayClient(
+  //   networkAntenna: AsyncOperation {
+  //     try await urlSession.data(for: $0.asNetworkRequest.urlRequest()).0
+  //   }
+  // )
 
   // Call async method in Rust land from Swift!
   let address = "account_rdx16xlfcpp0vf7e3gqnswv8j9k58n6rjccu58vvspmdva22kf3aplease"
   do {
     var balance = try await clientCompletionCallbackBased.getXrdBalanceOfAccount(address: address)
     print("SWIFT ✅ completionCallbackBased balance: \(balance) ✅")
-    balance = try await clientAsyncBased.getXrdBalanceOfAccount(address: address)
-    print("SWIFT ✅ clientAsyncBased balance: \(balance) ✅")
+    // balance = try await clientAsyncBased.getXrdBalanceOfAccount(address: address)
+    // print("SWIFT ✅ clientAsyncBased balance: \(balance) ✅")
   } catch {
     print("SWIFT ❌ getXrdBalanceOfAccount failed, error: \(String(describing: error))")
   }

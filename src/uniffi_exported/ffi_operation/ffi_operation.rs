@@ -19,14 +19,23 @@ impl HasFFIOperationKindInstance for NetworkRequest {
 /// side using [`FFIOperationDispatcher`], which responds
 /// back to us (Rust side) using [`FFIDataResultListener`]
 /// callback.
-#[derive(Clone, Debug, PartialEq, Eq, Enum)]
+#[derive(Clone, Debug, PartialEq, Eq, Enum, enum_as_inner::EnumAsInner)]
 pub enum FFIOperation {
     Networking { request: NetworkRequest },
 }
+
 impl HasFFIOperationKindInstance for FFIOperation {
     fn operation_kind(&self) -> FFIOperationKind {
         match self {
             FFIOperation::Networking { request: _ } => FFIOperationKind::Networking,
         }
     }
+}
+
+/// The `Ok`` value of a successful [`FfiOperationResult`],
+/// passed from Ffi for some [`FfiOperation`] send from Rust side
+/// to Fff side (Swift side).
+#[derive(Clone, Debug, PartialEq, Eq, Enum, enum_as_inner::EnumAsInner)]
+pub enum FFIOperationOk {
+    Networking { response: NetworkResponse },
 }

@@ -6,6 +6,6 @@ use crate::prelude::*;
 /// or a `Success` (data).
 #[derive(Enum, Clone, Debug)]
 pub enum FFIOperationResult {
-    Success { value: Option<Vec<u8>> },
+    Success { value: FFIOperationOk },
     Failure { error: SwiftSideError },
 }

@@ -4,7 +4,6 @@ use crate::prelude::*;
 /// handler from FFI side (Swift side) of type [`FFIOperationHandler`],
 /// it can e.g. be `URLSession` in Swift which supports making network
 /// calls.
-#[derive(Object)]
 pub struct FFIOperationDispatcher {
     /// Handler FFI side, receiving operations from us (Rust side),
     /// and passes result of the operation back to us (Rust side).

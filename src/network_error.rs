@@ -10,12 +10,13 @@ pub enum SwiftSideError {
     UnableToCastUrlResponseToHTTPUrlResponse,
 
     #[error(
-        "Swift 'URLRequest' failed with code '{status_code}', error message from Gateway: '{:?}', underlying error (URLSession): '{:?}'",
+        "Swift 'URLRequest' failed with code '{:?}', error message from Gateway: '{:?}', underlying error (URLSession): '{:?}'",
+        status_code,
         error_message_from_gateway,
         url_session_underlying_error
     )]
     RequestFailed {
-        status_code: u16,
+        status_code: Option<u16>,
         url_session_underlying_error: Option<String>,
         error_message_from_gateway: Option<String>,
     },
@@ -23,6 +24,12 @@ pub enum SwiftSideError {
 
 #[derive(Debug, PartialEq, Eq, Clone, ThisError, Error)]
 pub enum RustSideError {
+    #[error("No response code")]
+    NoResponseCode,
+
+    #[error("Bad response code")]
+    BadResponseCode,
+
     #[error(
         "Tried to dispatch unsupported operation {:?}, handler only supports: {:?}",
         operation,
@@ -42,11 +49,14 @@ pub enum RustSideError {
     #[error("Failed to receive response from Swift")]
     FailedToReceiveResponseFromSwift,
 
-    #[error("Failed to propagate FFI operation result back to displatcher")]
+    #[error("Failed to propagate FFI operation result back to dispatcher")]
     FailedToPropagateResultFromFFIOperationBackToDispatcher,
 
     #[error("HTTP Body of response from Swift was nil")]
     ResponseBodyWasNil,
+
+    #[error("Wrong response kind from FFIOperationOk, expected NetworkResponse")]
+    WrongFFIOperationOKExpectedNetworkResponse,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, ThisError, Error)]

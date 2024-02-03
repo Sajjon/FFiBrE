@@ -1,10 +1,11 @@
 use crate::prelude::*;
 
+
 impl FFIOperationDispatcher {
     pub(crate) async fn dispatch(
         &self,
         operation: FFIOperation,
-    ) -> Result<Option<Vec<u8>>, NetworkError> {
+    ) -> Result<FFIOperationOk, NetworkError> {
         if !self
             .handler
             .supported_operations()
@@ -41,6 +42,6 @@ impl FFIOperationDispatcher {
 
         // Map response from Swift -> Result<Option<Vec<u8>>, NetworkError>,
         // keeping any errors happening in Swift intact.
-        Result::<Option<Vec<u8>>, SwiftSideError>::from(response).map_err(|e| e.into())
+        Result::<FFIOperationOk, SwiftSideError>::from(response).map_err(|e| e.into())
     }
 }

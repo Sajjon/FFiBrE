@@ -7,14 +7,14 @@ use crate::prelude::*;
 #[derive(Enum, Clone, Debug)]
 pub enum FFINetworkResult {
     Success { value: NetworkResponse },
-    Failure { error: SwiftSideError },
+    Failure { error: FFINetworkingError },
 }
 
-impl Into<Result<NetworkResponse, SwiftSideError>> for FFINetworkResult {
-    fn into(self) -> Result<NetworkResponse, SwiftSideError> {
+impl Into<Result<NetworkResponse, FFISideError>> for FFINetworkResult {
+    fn into(self) -> Result<NetworkResponse, FFISideError> {
         match self {
             Self::Success { value } => Ok(value),
-            Self::Failure { error } => Err(error),
+            Self::Failure { error } => Err(error.into()),
         }
     }
 }

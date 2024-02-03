@@ -1,10 +1,5 @@
 use crate::prelude::*;
 
-pub trait ResultListener: From<FFIOperationResultListener<Self::OpResult>> {
-    type Request;
-    type OpResult: Into<Result<Self::Response, SwiftSideError>>;
-    type Response;
-}
 
 /// An object representing that Rust is listening on the result of an operation
 /// carried out by FFI (Swift-side). When FFI side has finished the operation,

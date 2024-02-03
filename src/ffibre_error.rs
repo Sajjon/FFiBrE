@@ -2,20 +2,17 @@ use crate::prelude::*;
 use thiserror::Error as ThisError;
 
 #[derive(Debug, PartialEq, Eq, Clone, ThisError, Error)]
-pub enum SwiftSideError {
-    #[error("Fail to create Swift 'Foundation.URL' from string: '{string}'")]
-    FailedToCreateURLFrom { string: String },
+pub enum FFISideError {
+    #[error(transparent)]
+    Networking {
+        #[from]
+        error: FFINetworkingError,
+    },
 
-    #[error(
-        "Swift 'URLRequest' failed with code '{:?}', error message from Gateway: '{:?}', underlying error (URLSession): '{:?}'",
-        status_code,
-        error_message_from_gateway,
-        url_session_underlying_error
-    )]
-    RequestFailed {
-        status_code: Option<u16>,
-        url_session_underlying_error: Option<String>,
-        error_message_from_gateway: Option<String>,
+    #[error(transparent)]
+    FileIOWrite {
+        #[from]
+        error: FFIFileIOWriteError,
     },
 }
 
@@ -47,7 +44,7 @@ pub enum RustSideError {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, ThisError, Error)]
-pub enum NetworkError {
+pub enum FFIBridgeError {
     #[error(transparent)]
     FromRust {
         #[from]
@@ -55,8 +52,8 @@ pub enum NetworkError {
     },
 
     #[error(transparent)]
-    FromSwift {
+    FromFFI {
         #[from]
-        error: SwiftSideError,
+        error: FFISideError,
     },
 }

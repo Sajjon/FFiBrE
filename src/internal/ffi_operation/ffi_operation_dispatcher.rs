@@ -4,13 +4,13 @@ use crate::prelude::*;
 /// handler from FFI side (Swift side) of type [`FFIOperationHandler`],
 /// it can e.g. be `URLSession` in Swift which supports making network
 /// calls.
-pub struct FFIOperationDispatcher<L: ResultListener> {
+pub struct FFIOperationDispatcher<L: IsResultListener> {
     /// Handler FFI side, receiving operations from us (Rust side),
     /// and passes result of the operation back to us (Rust side).
     pub handler: Arc<dyn FFIOperationHandler<L>>,
 }
 
-impl<L: ResultListener> FFIOperationDispatcher<L> {
+impl<L: IsResultListener> FFIOperationDispatcher<L> {
     /// Create a new dispatcher with a handler originally passed to Rust
     /// from FFI side (Swift side), e.g. a `URLSession` which implements
     /// the [`FFIOperationHandler`] trait (Swift: conforms to the `FFIOperationHandler`

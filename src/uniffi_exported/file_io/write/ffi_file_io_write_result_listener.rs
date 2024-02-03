@@ -4,7 +4,7 @@ use crate::prelude::*;
 pub struct FFIFileIOWriteResultListener {
     result_listener: FFIOperationResultListener<FFIFileIOWriteResult>,
 }
-impl ResultListener for FFIFileIOWriteResultListener {
+impl IsResultListener for FFIFileIOWriteResultListener {
     type OpResult = FFIFileIOWriteResult;
     type Request = FFIFileIOWriteRequest;
     type Response = FFIFileIOWriteResponse;

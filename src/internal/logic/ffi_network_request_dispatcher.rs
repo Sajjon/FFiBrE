@@ -14,4 +14,11 @@ impl FFINetworkRequestDispatcher {
     pub fn new(network_antenna: Arc<dyn FFINetworkingHandler>) -> Self {
         Self::with_dispatcher(FFIOperationDispatcher::new(network_antenna))
     }
+
+    pub(crate) async fn dispatch_network_request(
+        &self,
+        request: NetworkRequest,
+    ) -> Result<NetworkResponse, FFIBridgeError> {
+        self.dispatcher.dispatch(request).await
+    }
 }

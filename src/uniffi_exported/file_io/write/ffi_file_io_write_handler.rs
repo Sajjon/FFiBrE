@@ -10,17 +10,15 @@ pub trait FFIFileIOWriteHandler: FFIOperationHandler<FFIFileIOWriteResultListene
         &self,
         request: FFIFileIOWriteRequest,
         listener_rust_side: Arc<FFIFileIOWriteResultListener>,
-    ) -> Result<(), SwiftSideError>;
+    ) -> Result<(), FFISideError>;
 }
-
-
 
 impl<U: FFIFileIOWriteHandler> FFIOperationHandler<FFIFileIOWriteResultListener> for U {
     fn execute_operation(
         &self,
-        operation: <FFIFileIOWriteResultListener as ResultListener>::Request,
+        operation: <FFIFileIOWriteResultListener as IsResultListener>::Request,
         listener_rust_side: FFIFileIOWriteResultListener,
-    ) -> Result<(), SwiftSideError> {
+    ) -> Result<(), FFISideError> {
         self.execute_file_io_write_request(operation, listener_rust_side.into())
     }
 }

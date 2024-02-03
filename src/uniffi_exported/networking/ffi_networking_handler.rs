@@ -10,15 +10,15 @@ pub trait FFINetworkingHandler: FFIOperationHandler<FFINetworkingResultListener>
         &self,
         request: NetworkRequest,
         listener_rust_side: Arc<FFINetworkingResultListener>,
-    ) -> Result<(), SwiftSideError>;
+    ) -> Result<(), FFISideError>;
 }
 
 impl<U: FFINetworkingHandler> FFIOperationHandler<FFINetworkingResultListener> for U {
     fn execute_operation(
         &self,
-        operation: <FFINetworkingResultListener as ResultListener>::Request,
+        operation: <FFINetworkingResultListener as IsResultListener>::Request,
         listener_rust_side: FFINetworkingResultListener,
-    ) -> Result<(), SwiftSideError> {
+    ) -> Result<(), FFISideError> {
         self.execute_network_request(operation, listener_rust_side.into())
     }
 }

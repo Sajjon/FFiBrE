@@ -38,7 +38,7 @@ pub trait FFIOperationHandler: Send + Sync {
         &self,
         operation: FFIOperation,
         listener_rust_side: Arc<FFIOperationResultListener>,
-    ) -> Result<(), SwiftSideError>;
+    ) -> Result<(), FFISideError>;
 }
 ```
 
@@ -72,7 +72,7 @@ impl FFIOperationDispatcher {
     pub(crate) async fn dispatch(
         &self,
         operation: FFIOperation,
-    ) -> Result<Option<Vec<u8>>, NetworkError> {
+    ) -> Result<Option<Vec<u8>>, FFIBridgeError> {
         let (sender, receiver) = tokio::oneshot::channel::<FFIOperationResult>();
         let result_listener = FFIOperationResultListener::new(sender);
 
@@ -84,14 +84,14 @@ impl FFIOperationDispatcher {
                 // Pass callback, Swift will call `result_listener.notify_result`
                 result_listener.into(),
             )
-            .map_err(|e| NetworkError::from(e))?;
+            .map_err(|e| FFIBridgeError::from(e))?;
 
         // Await response from Swift
         let response: FFIOperationResult = receiver.await?;
 
-        // Map response from Swift -> Result<Option<Vec<u8>>, NetworkError>,
+        // Map response from Swift -> Result<Option<Vec<u8>>, FFIBridgeError>,
         // keeping any errors happening in Swift intact.
-        Result::<Option<Vec<u8>>, SwiftSideError>::from(response).map_err(|e| e.into())
+        Result::<Option<Vec<u8>>, FFISideError>::from(response).map_err(|e| e.into())
     }
 }
 ```
@@ -130,7 +130,7 @@ impl GatewayClient {
     pub async fn get_xrd_balance_of_account(
         &self,
         address: String,
-    ) -> Result<String, NetworkError> {
+    ) -> Result<String, FFIBridgeError> {
         self.make_request(
             GetEntityDetailsRequest::new(address),
             "https://mainnet.radixdlt.com/state/entity/details",
@@ -263,4 +263,3 @@ let balance = try await gatewayClient.getXrdBalanceOfAccount(address: "account_r
 print("SWIFT ✅ getXrdBalanceOfAccount success, got balance: \(balance) ✅")
 // 🎉
 ```
-

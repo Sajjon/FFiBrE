@@ -26,7 +26,7 @@ impl GatewayClient {
     pub async fn get_xrd_balance_of_account(
         &self,
         address: String,
-    ) -> Result<String, NetworkError> {
+    ) -> Result<String, FFIBridgeError> {
         self.post(
             "state/entity/details",
             GetEntityDetailsRequest::new(address),

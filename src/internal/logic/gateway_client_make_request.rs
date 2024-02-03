@@ -29,12 +29,12 @@ impl GatewayClient {
         method: impl AsRef<str>,
         request: T,
         map: F,
-    ) -> Result<V, NetworkError>
+    ) -> Result<V, FFIBridgeError>
     where
         T: Serialize,
         U: for<'a> Deserialize<'a>,
         F: Fn(U) -> Result<V, E>,
-        E: Into<NetworkError>,
+        E: Into<FFIBridgeError>,
     {
         // JSON serialize request into body bytes
         let body = to_vec(&request).unwrap();
@@ -63,7 +63,7 @@ impl GatewayClient {
         // Read out HTTP body from response and JSON parse it into U
         let model = self
             .model_from_response(response)
-            .map_err(|error| NetworkError::FromRust { error })?;
+            .map_err(|error| FFIBridgeError::FromRust { error })?;
 
         // Map U -> V
         map(model).map_err(|e| e.into())
@@ -78,12 +78,12 @@ impl GatewayClient {
         path: impl AsRef<str>,
         request: T,
         map: F,
-    ) -> Result<V, NetworkError>
+    ) -> Result<V, FFIBridgeError>
     where
         T: Serialize,
         U: for<'a> Deserialize<'a>,
         F: Fn(U) -> Result<V, E>,
-        E: Into<NetworkError>,
+        E: Into<FFIBridgeError>,
     {
         self.make_request(path, "POST", request, map).await
     }

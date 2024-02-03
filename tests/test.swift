@@ -1,6 +1,9 @@
 import Foundation
 import ffibre
 
+extension FfiNetworkingError: Swift.Error {} /* Some bug in UniFFI... */
+extension FfiFileIoWriteError: Swift.Error {} /* Some bug in UniFFI... */
+
 extension NetworkResponse {
   init(data: Data, urlResponse: URLResponse) {
     guard let httpUrlResponse = urlResponse as? HTTPURLResponse else {
@@ -21,7 +24,7 @@ extension FfiNetworkResult {
     }
 
     return .failure(
-      error: .RequestFailed(
+      error: .requestFailed(
         statusCode: statusCode(),
         urlSessionUnderlyingError: String(describing: error),
         errorMessageFromGateway: message()
@@ -58,7 +61,7 @@ extension NetworkRequest {
 
   func urlRequest() throws -> URLRequest {
     guard let url = URL(string: self.url) else {
-      throw SwiftSideError.FailedToCreateUrlFrom(string: self.url)
+      throw FfiNetworkingError.failedToCreateUrlFrom(string: self.url)
     }
     return self.urlRequest(url: url)
   }
@@ -71,7 +74,7 @@ extension URLSession: FfiNetworkingHandler {
     listenerRustSide: FfiNetworkingResultListener
   ) throws {
     guard let url = URL(string: rustRequest.url) else {
-      throw SwiftSideError.FailedToCreateUrlFrom(string: rustRequest.url)
+      throw FfiNetworkingError.failedToCreateUrlFrom(string: rustRequest.url)
     }
     let task = dataTask(with: rustRequest.urlRequest(url: url)) { data, urlResponse, error in
       let result = FfiNetworkResult.with(

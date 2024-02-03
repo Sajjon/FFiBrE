@@ -4,7 +4,7 @@ use crate::prelude::*;
 pub struct FFINetworkingResultListener {
     result_listener: FFIOperationResultListener<FFINetworkResult>,
 }
-impl ResultListener for FFINetworkingResultListener {
+impl IsResultListener for FFINetworkingResultListener {
     type OpResult = FFINetworkResult;
     type Request = NetworkRequest;
     type Response = NetworkResponse;

@@ -85,7 +85,7 @@ extension URLSession: FfiNetworkingHandler {
   }
 }
 
-public final class AsyncOperation<Request, Intermediary, Response> {
+public final class Async<Request, Intermediary, Response> {
   typealias Operation = (Request) async throws -> Intermediary
   typealias MapToResponse = (Intermediary) async throws -> Response
 
@@ -103,7 +103,22 @@ public final class AsyncOperation<Request, Intermediary, Response> {
   }
 }
 
-extension AsyncOperation: FfiNetworkingHandler
+extension Async
+where Request == NetworkRequest, Intermediary == (Data, URLResponse), Response == NetworkResponse {
+  convenience init(
+    call op: @escaping (URLRequest) async throws -> Intermediary
+  ) {
+    self.init(
+      operation: { (rustRequest: NetworkRequest) in try await op(rustRequest.urlRequest()) },
+      mapToResponse: { (data: Data, urlResponse: URLResponse) in
+        NetworkResponse(data: data, urlResponse: urlResponse)
+      }
+    )
+  }
+
+}
+
+extension Async: FfiNetworkingHandler
 where Request == NetworkRequest, Intermediary == (Data, URLResponse), Response == NetworkResponse {
   public func executeNetworkRequest(
     request rustRequest: NetworkRequest,
@@ -129,11 +144,7 @@ func test() async throws {
   )
 
   let clientAsyncBased = GatewayClient(
-    networkAntenna: AsyncOperation {
-      try await urlSession.data(for: $0.urlRequest())
-    } mapToResponse: { (data: Data, urlResponse: URLResponse) in
-      NetworkResponse(data: data, urlResponse: urlResponse)
-    }
+    networkAntenna: Async(call: urlSession.data(for:))
   )
 
   // Call async method in Rust land from Swift!

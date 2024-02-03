@@ -6,9 +6,6 @@ pub enum SwiftSideError {
     #[error("Fail to create Swift 'Foundation.URL' from string: '{string}'")]
     FailedToCreateURLFrom { string: String },
 
-    #[error("Unable to cast Swift 'Foundation.URLResponse' into 'Foundation.HTTPURLResponse'")]
-    UnableToCastUrlResponseToHTTPUrlResponse,
-
     #[error(
         "Swift 'URLRequest' failed with code '{:?}', error message from Gateway: '{:?}', underlying error (URLSession): '{:?}'",
         status_code,

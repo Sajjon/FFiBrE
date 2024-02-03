@@ -6,9 +6,6 @@ use crate::prelude::*;
 pub struct NetworkResponse {
     pub status_code: u16,
 
-    pub url: String,
-    pub headers: HashMap<String, String>,
-    
-    /// Can be empty though.
+    /// Can be empty.
     pub body: Vec<u8>,
 }

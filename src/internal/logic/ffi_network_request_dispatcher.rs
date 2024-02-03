@@ -8,7 +8,7 @@ impl FFINetworkRequestDispatcher {
     pub fn with_dispatcher(dispatcher: FFIOperationDispatcher) -> Self {
         Self { dispatcher }
     }
-    pub fn new(network_antenna: Arc<dyn FFINetworkRequestHandler>) -> Self {
+    pub fn new(network_antenna: Arc<dyn FFINetworkingHandler>) -> Self {
         Self::with_dispatcher(FFIOperationDispatcher::new(network_antenna))
     }
     pub(crate) async fn dispatch_network_request(

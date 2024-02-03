@@ -35,21 +35,21 @@ pub trait FFIOperationHandler: Send + Sync {
     fn execute_operation(
         &self,
         operation: FFIOperation,
-        listener_rust_side: Arc<FFIDataResultListener>,
+        listener_rust_side: Arc<FFIOperationResultListener>,
     ) -> Result<(), SwiftSideError>;
 }
 ```
 
-Where `FFIDataResultListener` is:
+Where `FFIOperationResultListener` is:
 
 ```rust,no_run
 #[derive(Object)]
-pub struct FFIDataResultListener {
+pub struct FFIOperationResultListener {
     sender: Mutex<Option<tokio::oneshot::Sender<FFIOperationResult>>>,
 }
 
 #[export]
-impl FFIDataResultListener {
+impl FFIOperationResultListener {
     fn notify_result(&self, result: FFIOperationResult) {
        self.sender.send(result) // Pseudocode
     }
@@ -72,7 +72,7 @@ impl FFIOperationDispatcher {
         operation: FFIOperation,
     ) -> Result<Option<Vec<u8>>, NetworkError> {
         let (sender, receiver) = tokio::oneshot::channel::<FFIOperationResult>();
-        let result_listener = FFIDataResultListener::new(sender);
+        let result_listener = FFIOperationResultListener::new(sender);
 
         // Make request
         self.handler

@@ -1,6 +1,5 @@
 use crate::prelude::*;
 
-
 impl FFIOperationDispatcher {
     pub(crate) async fn dispatch(
         &self,
@@ -23,7 +22,7 @@ impl FFIOperationDispatcher {
         let (sender, receiver) = channel::<FFIOperationResult>();
 
         // Our callback we pass to Swift
-        let result_listener = FFIDataResultListener::new(sender);
+        let result_listener = FFIOperationResultListener::new(sender);
 
         // Make request
         self.handler

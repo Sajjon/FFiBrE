@@ -105,7 +105,7 @@ extension AsyncOperation where T == Data {
 
 }
 
-extension AsyncOperation: FFINetworkRequestHandler {
+extension AsyncOperation: FFINetworkingHandler {
 	public func supportedOperations() -> [FfiOperationKind] {
 		supportedOperationKinds
 	}
@@ -148,22 +148,16 @@ extension NetworkRequest {
   }
 }
 
-// Conform `[Swift]URLSession` to `[Rust]FfiOperationHandler`
-extension URLSession: FfiNetworkRequestHandler {
-  public func supportedOperations() -> [FfiOperationKind] {
-    [.networking]
-  }
-
+// Conform `[Swift]URLSession` to `[Rust]FfiNetworkingHandler`
+extension URLSession: FfiNetworkingHandler {
   public func executeNetworkRequest(
     operation rustRequest: NetworkRequest,
-    listenerRustSide: FfiDataResultListener
+    listenerRustSide: FfiOperationResultListener
   ) throws {
-    let urlString = rustRequest.url
-    guard let url = URL(string: urlString) else {
-      throw SwiftSideError.FailedToCreateUrlFrom(string: urlString)
+    guard let url = URL(string: rustRequest.url) else {
+      throw SwiftSideError.FailedToCreateUrlFrom(string: rustRequest.url)
     }
-    let swiftURLRequest = rustRequest.urlRequest(url: url)
-    let task = dataTask(with: swiftURLRequest) { data, urlResponse, error in
+    let task = dataTask(with: rustRequest.urlRequest(url: url)) { data, urlResponse, error in
       let result = FfiOperationResult.with(
         to: rustRequest,
         data: data,
@@ -172,8 +166,6 @@ extension URLSession: FfiNetworkRequestHandler {
       )
       listenerRustSide.notifyResult(result: result)
     }
-
-    // Start `[Swift]URLSessionDataTask`
     task.resume()
   }
 }

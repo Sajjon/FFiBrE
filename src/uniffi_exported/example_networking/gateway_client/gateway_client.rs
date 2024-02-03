@@ -13,7 +13,7 @@ impl GatewayClient {
     /// implementing [`FFIOperationHandler`] on the FFI side (Swift side), e.g.
     /// `[Swift]URLSession` which wraps the execution of a network call.
     #[uniffi::constructor]
-    pub fn new(network_antenna: Arc<dyn FFINetworkRequestHandler>) -> Self {
+    pub fn new(network_antenna: Arc<dyn FFINetworkingHandler>) -> Self {
         Self {
             network_dispatcher: FFINetworkRequestDispatcher::new(network_antenna).into(),
         }

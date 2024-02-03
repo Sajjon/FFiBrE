@@ -10,12 +10,7 @@ impl FFIOperationDispatcher {
             .supported_operations()
             .contains(&operation.operation_kind())
         {
-            return Err(NetworkError::FromRust {
-                error: RustSideError::UnsupportedOperation {
-                    operation,
-                    only_supported: self.handler.supported_operations(),
-                },
-            });
+            panic!("Unsupported operation: {:?}", operation)
         }
 
         // Underlying tokio channel used to get result from Swift back to Rust.

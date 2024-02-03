@@ -1,5 +1,5 @@
-mod example_networking;
-mod ffi_operation;
+mod example_gateway;
+mod networking;
 
-pub use example_networking::*;
-pub use ffi_operation::*;
+pub use example_gateway::*;
+pub use networking::*;

@@ -1,6 +1,7 @@
 use crate::prelude::*;
 
-#[derive(Record, Clone, Debug, PartialEq, Eq)]
-pub struct FFIFileIOWriteResponse {
-    pub already_existed: bool,
+#[derive(Enum, Clone, Debug, PartialEq, Eq)]
+pub enum FFIFileIOWriteResponse {
+    OverwriteAborted,
+    DidWrite { already_existed: bool }
 }

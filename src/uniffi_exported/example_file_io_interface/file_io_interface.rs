@@ -27,46 +27,41 @@ impl FileIOInterface {
             .reader
             .dispatch(FFIFileIOReadRequest::new(file_absolute_path))
             .await?;
-        let file: Option<FFIFileIOReadResponseFileExists> = response.into();
-        Ok(file.map(|f| f.contents))
+        Ok(response.into())
     }
 
-    /// Returns `true` if the file already existed, else `false` if a completely
-    /// new file was created.
     pub(crate) async fn write(
         &self,
         file_absolute_path: String,
         contents: Vec<u8>,
         exists_strategy: FileAlreadyExistsStrategy,
-    ) -> Result<bool, FFIBridgeError> {
-        let response = self
-            .writer
+    ) -> Result<FFIFileIOWriteResponse, FFIBridgeError> {
+        self.writer
             .dispatch(FFIFileIOWriteRequest::new(
                 file_absolute_path,
                 contents,
                 exists_strategy,
             ))
-            .await?;
-        Ok(response.already_existed)
+            .await
     }
 
-    /// Returns `true` if the file already existed, else `false` if a completely
-    /// new file was created.
     pub async fn write_to_new_or_extend_existing_file(
         &self,
         file_absolute_path: String,
         extend_strategy: ExtendExistingFileStrategy,
         contents: Vec<u8>,
-    ) -> Result<bool, FFIBridgeError> {
+    ) -> Result<FFIFileIOWriteResponse, FFIBridgeError> {
         let mut contents = contents;
         contents = self.read(file_absolute_path.clone()).await.map(|r| {
             if let Some(mut existing) = r {
                 match extend_strategy {
-                    ExtendExistingFileStrategy::Append => {
+                    ExtendExistingFileStrategy::Append { separator } => {
+                        existing.extend(separator.as_bytes());
                         existing.extend(contents);
                         existing
                     }
-                    ExtendExistingFileStrategy::Prepend => {
+                    ExtendExistingFileStrategy::Prepend { separator } => {
+                        contents.extend(separator.as_bytes());
                         contents.extend(existing);
                         contents
                     }
@@ -87,6 +82,6 @@ impl FileIOInterface {
 
 #[derive(Enum, Clone, Debug, PartialEq, Eq)]
 pub enum ExtendExistingFileStrategy {
-    Append,
-    Prepend,
+    Append { separator: String },
+    Prepend { separator: String },
 }

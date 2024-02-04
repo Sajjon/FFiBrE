@@ -107,8 +107,9 @@ public final class Async<Request, Intermediary, Response> {
   }
 }
 
-extension Async
+extension Async: FfiNetworkingHandler
 where Request == NetworkRequest, Intermediary == (Data, URLResponse), Response == NetworkResponse {
+
   convenience init(
     call op: @escaping (URLRequest) async throws -> Intermediary
   ) {
@@ -120,10 +121,6 @@ where Request == NetworkRequest, Intermediary == (Data, URLResponse), Response =
     )
   }
 
-}
-
-extension Async: FfiNetworkingHandler
-where Request == NetworkRequest, Intermediary == (Data, URLResponse), Response == NetworkResponse {
   public func executeNetworkRequest(
     request rustRequest: NetworkRequest,
     listenerRustSide: FfiNetworkingResultListener
@@ -140,14 +137,61 @@ where Request == NetworkRequest, Intermediary == (Data, URLResponse), Response =
   }
 }
 
-// extension FileManager {
-//   func write(request: FfiFileIoWriteRequest) async throws -> FfiFileIoWriteResponse {
-//     let currentDir = currentDirectoryPath
-//       try "Hej".write(toFile: "safe_to_delete.txt", atomically: false, encoding: .utf8)
-//   }
-// }
+public final class AsyncFileManager {
+  private init() {}
+  static let shared = AsyncFileManager()
+}
+extension AsyncFileManager {
+  public func read(absolutePath: String) async throws -> Data? {
+    guard let fileHandle = FileHandle(forReadingAtPath: absolutePath) else {
+      return nil
+    }
+    var iterator = fileHandle.bytes.makeAsyncIterator()
 
-public final class SimpleFileManager {
+    do {
+      var contents = Data()
+      while let byte = try await iterator.next() {
+        contents.append(byte)
+      }
+      return contents
+    } catch {
+      throw FfiFileIoReadError.unknown(underlying: String(describing: error))
+    }
+  }
+}
+
+extension Async: FfiFileIoReadHandler
+where Request == FfiFileIoReadRequest, Intermediary == Data?, Response == FfiFileIoReadResponse {
+
+  convenience init(
+    call op: @escaping (String) async throws -> Intermediary
+  ) {
+    self.init(
+      operation: { (rustRequest: Request) in try await op(rustRequest.absolutePath) },
+      mapToResponse: { (data: Data?) in
+        data.map { .exists(contents: $0) } ?? .doesNotExist
+      }
+    )
+  }
+
+  public func executeFileIoReadRequest(
+    request rustRequest: FfiFileIoReadRequest,
+    listenerRustSide: FfiFileIoReadResultListener
+  ) throws {
+    self.task = Task {
+      do {
+        let intermediary = try await self.operation(rustRequest)
+        let response = try await self.mapToResponse(intermediary)
+        listenerRustSide.notifyResult(result: .success(value: response))
+      } catch {
+        listenerRustSide.notifyResult(
+          result: .failure(error: .unknown(underlying: String(describing: error))))
+      }
+    }
+  }
+}
+
+public final class CallbackBasedFileManager {
   private let queue: DispatchQueue
   private init() {
     self.queue = DispatchQueue(
@@ -156,14 +200,14 @@ public final class SimpleFileManager {
       target: nil
     )
   }
-  static let shared = SimpleFileManager()
+  static let shared = CallbackBasedFileManager()
 }
-extension SimpleFileManager: FfiFileIoReadHandler {
-  public func read(absolutePath: String, callback: @escaping (FfiFileIoReadResult) -> Void) {
+extension CallbackBasedFileManager: FfiFileIoReadHandler {
+  func read(absolutePath: String, callback: @escaping (FfiFileIoReadResult) -> Void) {
     print("🪲 SWIFT SimpleFileManager read: '\(absolutePath)'")
     guard let fileHandle = FileHandle(forReadingAtPath: absolutePath) else {
       return callback(
-        FfiFileIoReadResult.success(value: .doesNotExist(absolutePath: absolutePath)))
+        FfiFileIoReadResult.success(value: .doesNotExist))
     }
     queue.async {
       let result: FfiFileIoReadResult
@@ -171,13 +215,11 @@ extension SimpleFileManager: FfiFileIoReadHandler {
         if let contents = try fileHandle.readToEnd() {
           result = .success(
             value: .exists(
-              file: FfiFileIoReadResponseFileExists(
-                absolutePath: absolutePath,
-                contents: contents)
+              contents: contents
             )
           )
         } else {
-          result = .success(value: .doesNotExist(absolutePath: absolutePath))
+          result = .success(value: .doesNotExist)
         }
       } catch {
         result = .failure(error: .unknown(underlying: String(describing: error)))
@@ -188,23 +230,6 @@ extension SimpleFileManager: FfiFileIoReadHandler {
     }
   }
 
-  public func read(absolutePath: String) async throws -> Data? {
-    try await withCheckedThrowingContinuation { continuation in
-      self.read(absolutePath: absolutePath) { result in
-        switch result {
-        case let .success(response):
-          switch response {
-          case .exists(let file):
-            continuation.resume(returning: file.contents)
-          case .doesNotExist:
-            continuation.resume(returning: nil)
-          }
-        case let .failure(error):
-          continuation.resume(throwing: error)
-        }
-      }
-    }
-  }
   public func executeFileIoReadRequest(
     request: FfiFileIoReadRequest,
     listenerRustSide: FfiFileIoReadResultListener
@@ -215,37 +240,107 @@ extension SimpleFileManager: FfiFileIoReadHandler {
   }
 }
 
-extension SimpleFileManager: FfiFileIoWriteHandler {
+extension CallbackBasedFileManager: FfiFileIoWriteHandler {
+  func write(
+    contents: Data,
+    to absolutePath: String,
+    abortIfExists: Bool,
+    callback: @escaping (FfiFileIoWriteResult) -> Void
+  ) {
+    print("🐌 SWIFT SimpleFileManager write: '\(absolutePath)'")
+    let alreadyExisted = FileManager.default.fileExists(atPath: absolutePath)
+    if alreadyExisted {
+      if abortIfExists {
+        return callback(.success(value: .overwriteAborted))
+      }
+    } else {
+      guard FileManager.default.createFile(atPath: absolutePath, contents: nil) else {
+        return callback(
+          .failure(
+            error: .unknown(underlying: "Failed to createFile")
+          )
+        )
+      }
+    }
+    guard let fileHandle = FileHandle(forWritingAtPath: absolutePath) else {
+      if !alreadyExisted {
+        print(
+          "SWIFT ❌ failed to create filehandler for writing, and it does not already exist... Must we perhaps use another API to CREATE the file if it does not exists?"
+        )
+      }
+      return callback(
+        .failure(
+          error: .unknown(underlying: "Failed to create FileHandle for writing")
+        )
+      )
+    }
+    queue.async {
+      let result: FfiFileIoWriteResult
+      do {
+        try fileHandle.write(contentsOf: contents)
+        result = .success(value: .didWrite(alreadyExisted: alreadyExisted))
+      } catch {
+        result = .failure(error: .unknown(underlying: String(describing: error)))
+      }
+      DispatchQueue.main.async {
+        callback(result)
+      }
+    }
+
+  }
   public func executeFileIoWriteRequest(
     request: FfiFileIoWriteRequest,
     listenerRustSide: FfiFileIoWriteResultListener
   ) throws {
-    print("🐌 SWIFT write request ignored")
-    listenerRustSide.notifyResult(result: .failure(error: .unknown(underlying: "😅Not yet implemented")))
+    self.write(
+      contents: request.contents,
+      to: request.absolutePath,
+      abortIfExists: request.existsStrategy == .abort
+    ) { result in
+      listenerRustSide.notifyResult(result: result)
+    }
   }
+}
+
+func test_file_io_callbackbased(fileAbsolutePath: String) async throws {
+  print("🚀 SWIFT 'test_file_io_callbackbased' start")
+  defer { print("🏁 SWIFT 'test_file_io_callbackbased' done") }
+  let fileIoInterface = FileIoInterface(
+    fileWriter: CallbackBasedFileManager.shared,
+    fileReader: CallbackBasedFileManager.shared
+  )
+
+  let outcome = try await fileIoInterface.writeToNewOrExtendExistingFile(
+    fileAbsolutePath: fileAbsolutePath,
+    extendStrategy: .prepend(separator: "\n"),
+    contents: "Callback".data(using: .utf8)!
+  )
+  print("✅ writeToNewOrExtendExistingFile CB outcome: \(outcome)")
+}
+
+func test_file_io_async(fileAbsolutePath: String) async throws {
+  print("🚀 SWIFT 'test_file_io_callbackbased' start")
+  defer { print("🏁 SWIFT 'test_file_io_callbackbased' done") }
+  let fileIoInterface = FileIoInterface(
+    fileWriter: CallbackBasedFileManager.shared,
+    fileReader: Async(call: AsyncFileManager.shared.read(absolutePath:))
+  )
+
+  let outcome = try await fileIoInterface.writeToNewOrExtendExistingFile(
+    fileAbsolutePath: fileAbsolutePath,
+    extendStrategy: .append(separator: "\n"),
+    contents: "Async".data(using: .utf8)!
+  )
+  print("✅ writeToNewOrExtendExistingFile ASYNC outcome: \(outcome)")
 }
 
 func test_file_io() async throws {
   print("🚀 SWIFT 'test_file_io' start")
   defer { print("🏁 SWIFT 'test_file_io' done") }
-  let fileIoInterfaceCallbackBased = FileIoInterface(
-    fileWriter: SimpleFileManager.shared,
-    fileReader: SimpleFileManager.shared
-  )
-  /*
-      pub async fn write_to_new_or_extend_existing_file(
-        &self,
-        file_absolute_path: String,
-        extend_strategy: ExtendExistingFileStrategy,
-        contents: Vec<u8>,
-    ) -> Result<bool, FFIBridgeError> {
-  */
-  let existed = try await fileIoInterfaceCallbackBased.writeToNewOrExtendExistingFile(
-    fileAbsolutePath: "\(FileManager.default.currentDirectoryPath)/safeToRemove.txt",
-    extendStrategy: .append,
-    contents: "Hej fran bindgen test".data(using: .utf8)!
-  )
-  print("✅ writeToNewOrExtendExistingFile existed: \(existed)")
+  let fileAbsolutePath = "\(FileManager.default.currentDirectoryPath)/safeToRemove.txt"
+  try await test_file_io_callbackbased(fileAbsolutePath: fileAbsolutePath)
+  try await test_file_io_async(fileAbsolutePath: fileAbsolutePath)
+  try await test_file_io_callbackbased(fileAbsolutePath: fileAbsolutePath)
 }
 
 func test() async throws {

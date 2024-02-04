@@ -2,25 +2,15 @@ use crate::prelude::*;
 
 #[derive(Enum, Clone, Debug, PartialEq, Eq)]
 pub enum FFIFileIOReadResponse {
-    Exists {
-        file: FFIFileIOReadResponseFileExists,
-    },
-    DoesNotExist {
-        absolute_path: String,
-    },
+    Exists { contents: Vec<u8> },
+    DoesNotExist,
 }
 
-impl From<FFIFileIOReadResponse> for Option<FFIFileIOReadResponseFileExists> {
+impl From<FFIFileIOReadResponse> for Option<Vec<u8>> {
     fn from(value: FFIFileIOReadResponse) -> Self {
         match value {
-            FFIFileIOReadResponse::Exists { file } => Some(file),
-            FFIFileIOReadResponse::DoesNotExist { absolute_path: _ } => None,
+            FFIFileIOReadResponse::Exists { contents } => Some(contents),
+            FFIFileIOReadResponse::DoesNotExist => None,
         }
     }
-}
-
-#[derive(Record, Clone, Debug, PartialEq, Eq)]
-pub struct FFIFileIOReadResponseFileExists {
-    pub absolute_path: String,
-    pub contents: Vec<u8>,
 }

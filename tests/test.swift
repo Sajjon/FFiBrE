@@ -5,6 +5,34 @@ extension FfiNetworkingError: Swift.Error {} /* Some bug in UniFFI... */
 extension FfiFileIoWriteError: Swift.Error {} /* Some bug in UniFFI... */
 extension FfiFileIoReadError: Swift.Error {} /* Some bug in UniFFI... */
 
+struct FileHandleForWritingOutcome {
+  let fileAlreadyExists: Bool
+  let result: Result<FileHandle, FfiFileIoWriteError>
+}
+func fileForWriting(to absolutePath: String) -> FileHandleForWritingOutcome {
+
+  let alreadyExisted = FileManager.default.fileExists(atPath: absolutePath)
+  if !alreadyExisted {
+    guard FileManager.default.createFile(atPath: absolutePath, contents: nil) else {
+      return FileHandleForWritingOutcome(
+        fileAlreadyExists: false,
+        result: .failure(.failedToCreateNewFile)
+      )
+    }
+  }
+  guard let fileHandle = FileHandle(forWritingAtPath: absolutePath) else {
+    return FileHandleForWritingOutcome(
+      fileAlreadyExists: alreadyExisted,
+      result: .failure(.failedToGetHandleToFileForWriting)
+    )
+  }
+  return FileHandleForWritingOutcome(
+    fileAlreadyExists: alreadyExisted,
+    result: .success(fileHandle)
+  )
+
+}
+
 extension NetworkResponse {
   init(data: Data, urlResponse: URLResponse) {
     guard let httpUrlResponse = urlResponse as? HTTPURLResponse else {
@@ -158,6 +186,29 @@ extension AsyncFileManager {
       throw FfiFileIoReadError.unknown(underlying: String(describing: error))
     }
   }
+
+  public func write(contents: Data, absolutePath: String, abortIfExists: Bool) async throws
+    -> FfiFileIoWriteResponse
+  {
+    let fileHandleOutcome = fileForWriting(to: absolutePath)
+    let alreadyExists = fileHandleOutcome.fileAlreadyExists
+    if abortIfExists, alreadyExists {
+      return .overwriteAborted
+    }
+    switch fileHandleOutcome.result {
+    case let .failure(error): throw error
+    case let .success(fileHandle):
+      do {
+        try fileHandle.write(contentsOf: contents)
+        return .didWrite(alreadyExisted: alreadyExists)
+      } catch {
+        throw FfiFileIoWriteError.failedToWriteToFileHandle(
+          underlying: String(describing: error)
+        )
+      }
+    }
+  }
+
 }
 
 extension Async: FfiFileIoReadHandler
@@ -186,6 +237,44 @@ where Request == FfiFileIoReadRequest, Intermediary == Data?, Response == FfiFil
       } catch {
         listenerRustSide.notifyResult(
           result: .failure(error: .unknown(underlying: String(describing: error))))
+      }
+    }
+  }
+}
+
+extension Async: FfiFileIoWriteHandler
+where
+  Request == FfiFileIoWriteRequest, Intermediary == FfiFileIoWriteResponse,
+  Response == FfiFileIoWriteResponse
+{
+
+  convenience init(
+    call op: @escaping (Data, String, Bool) async throws -> Intermediary
+  ) {
+    self.init(
+      operation: { (rustRequest: Request) in
+        try await op(
+          rustRequest.contents, rustRequest.absolutePath, rustRequest.existsStrategy == .abort)
+      },
+      mapToResponse: { $0 }
+    )
+  }
+
+  public func executeFileIoWriteRequest(
+    request rustRequest: Request,
+    listenerRustSide: FfiFileIoWriteResultListener
+  ) throws {
+    self.task = Task {
+      do {
+        let intermediary = try await self.operation(rustRequest)
+        let response = try await self.mapToResponse(intermediary)
+        listenerRustSide.notifyResult(result: .success(value: response))
+      } catch let writeError as FfiFileIoWriteError {
+        listenerRustSide.notifyResult(
+          result: .failure(error: writeError)
+        )
+      } catch {
+        fatalError("Expected all errors to be of type FfiFileIoWriteError")
       }
     }
   }
@@ -248,40 +337,30 @@ extension CallbackBasedFileManager: FfiFileIoWriteHandler {
     callback: @escaping (FfiFileIoWriteResult) -> Void
   ) {
     print("🐌 SWIFT SimpleFileManager write: '\(absolutePath)'")
-    let alreadyExisted = FileManager.default.fileExists(atPath: absolutePath)
-    if alreadyExisted {
-      if abortIfExists {
-        return callback(.success(value: .overwriteAborted))
-      }
-    } else {
-      guard FileManager.default.createFile(atPath: absolutePath, contents: nil) else {
-        return callback(
-          .failure(
-            error: .unknown(underlying: "Failed to createFile")
-          )
-        )
-      }
+
+    let fileHandleOutcome = fileForWriting(to: absolutePath)
+    let alreadyExists = fileHandleOutcome.fileAlreadyExists
+    if abortIfExists, alreadyExists {
+      return callback(.success(value: .overwriteAborted))
     }
-    guard let fileHandle = FileHandle(forWritingAtPath: absolutePath) else {
-      if !alreadyExisted {
-        print(
-          "SWIFT ❌ failed to create filehandler for writing, and it does not already exist... Must we perhaps use another API to CREATE the file if it does not exists?"
-        )
-      }
-      return callback(
-        .failure(
-          error: .unknown(underlying: "Failed to create FileHandle for writing")
-        )
-      )
-    }
+
     queue.async {
       let result: FfiFileIoWriteResult
-      do {
-        try fileHandle.write(contentsOf: contents)
-        result = .success(value: .didWrite(alreadyExisted: alreadyExisted))
-      } catch {
-        result = .failure(error: .unknown(underlying: String(describing: error)))
+
+      switch fileHandleOutcome.result {
+      case let .failure(error): result = .failure(error: error)
+      case let .success(fileHandle):
+        do {
+          try fileHandle.write(contentsOf: contents)
+          result = .success(value: .didWrite(alreadyExisted: alreadyExists))
+        } catch {
+          result = .failure(
+            error: .failedToWriteToFileHandle(
+              underlying: String(describing: error)
+            ))
+        }
       }
+
       DispatchQueue.main.async {
         callback(result)
       }
@@ -322,7 +401,7 @@ func test_file_io_async(fileAbsolutePath: String) async throws {
   print("🚀 SWIFT 'test_file_io_callbackbased' start")
   defer { print("🏁 SWIFT 'test_file_io_callbackbased' done") }
   let fileIoInterface = FileIoInterface(
-    fileWriter: CallbackBasedFileManager.shared,
+    fileWriter: Async(call: AsyncFileManager.shared.write(contents:absolutePath:abortIfExists:)),
     fileReader: Async(call: AsyncFileManager.shared.read(absolutePath:))
   )
 

@@ -13,6 +13,7 @@ serde = { version = "1.0.196", features = ["derive"] }
 serde_json = { version = "1.0.113", features = ["preserve_order"] }
 thiserror = "1.0.56"
 uniffi = { version = "0.26.1", features = ["bindgen-tests"] }
+enum-as-inner = "0.6.0"
 
 [lib]
 crate-type = ["staticlib", "cdylib", "lib"]

@@ -2,36 +2,33 @@ use crate::prelude::*;
 use thiserror::Error as ThisError;
 
 #[derive(Debug, PartialEq, Eq, Clone, ThisError, Error)]
-pub enum SwiftSideError {
-    #[error("Fail to create Swift 'Foundation.URL' from string: '{string}'")]
-    FailedToCreateURLFrom { string: String },
+pub enum FFISideError {
+    #[error(transparent)]
+    Networking {
+        #[from]
+        error: FFINetworkingError,
+    },
 
-    #[error("Unable to cast Swift 'Foundation.URLResponse' into 'Foundation.HTTPURLResponse'")]
-    UnableToCastUrlResponseToHTTPUrlResponse,
+    #[error(transparent)]
+    FileIOWrite {
+        #[from]
+        error: FFIFileIOWriteError,
+    },
 
-    #[error(
-        "Swift 'URLRequest' failed with code '{status_code}', error message from Gateway: '{:?}', underlying error (URLSession): '{:?}'",
-        error_message_from_gateway,
-        url_session_underlying_error
-    )]
-    RequestFailed {
-        status_code: u16,
-        url_session_underlying_error: Option<String>,
-        error_message_from_gateway: Option<String>,
+    #[error(transparent)]
+    FileIORead {
+        #[from]
+        error: FFIFileIOReadError,
     },
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, ThisError, Error)]
 pub enum RustSideError {
-    #[error(
-        "Tried to dispatch unsupported operation {:?}, handler only supports: {:?}",
-        operation,
-        only_supported
-    )]
-    UnsupportedOperation {
-        operation: FFIOperation,
-        only_supported: Vec<FFIOperationKind>,
-    },
+    #[error("No response code")]
+    NoResponseCode,
+
+    #[error("Bad response code")]
+    BadResponseCode,
 
     #[error("Unable to JSON deserialize HTTP response body into type: {type_name}")]
     UnableJSONDeserializeHTTPResponseBodyIntoTypeName { type_name: String },
@@ -42,15 +39,18 @@ pub enum RustSideError {
     #[error("Failed to receive response from Swift")]
     FailedToReceiveResponseFromSwift,
 
-    #[error("Failed to propagate FFI operation result back to displatcher")]
+    #[error("Failed to propagate FFI operation result back to dispatcher")]
     FailedToPropagateResultFromFFIOperationBackToDispatcher,
 
     #[error("HTTP Body of response from Swift was nil")]
     ResponseBodyWasNil,
+
+    #[error("Wrong response kind from FFIOperationOk, expected FFINetworkingResponse")]
+    WrongFFIOperationOKExpectedFFINetworkingResponse,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, ThisError, Error)]
-pub enum NetworkError {
+pub enum FFIBridgeError {
     #[error(transparent)]
     FromRust {
         #[from]
@@ -58,8 +58,8 @@ pub enum NetworkError {
     },
 
     #[error(transparent)]
-    FromSwift {
+    FromFFI {
         #[from]
-        error: SwiftSideError,
+        error: FFISideError,
     },
 }

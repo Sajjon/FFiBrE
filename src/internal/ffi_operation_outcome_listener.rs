@@ -16,7 +16,7 @@ impl<R> FFIOperationOutcomeListener<R> {
     }
 
     /// This is called from FFI Side (Swift side), inside the implementation of
-    /// an `execute_operation:operation:listener_rust_side` method on a [`FFIOperationHandler`],
+    /// an `execute_request:operation:listener_rust_side` method on a [`FFIOperationExecutor`],
     /// when the operation has finished, with the `result` of type Self::R
     pub(crate) fn notify_outcome(&self, result: R) {
         self.sender

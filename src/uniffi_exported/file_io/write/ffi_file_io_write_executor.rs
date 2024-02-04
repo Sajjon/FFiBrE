@@ -1,7 +1,7 @@
 use crate::prelude::*;
 
 #[uniffi::export(with_foreign)]
-pub trait FFIFileIOWriteHandler: FFIOperationHandler<FFIFileIOWriteOutcomeListener> {
+pub trait FFIFileIOWriteExecutor: FFIOperationExecutor<FFIFileIOWriteOutcomeListener> {
     /// Rust will tell the handler to execute `operation` by calling this
     /// function, which a concrete type FFI side (Swift side) has implemented.
     /// Once the operation has finished with a result (Success/Failure) it
@@ -13,12 +13,12 @@ pub trait FFIFileIOWriteHandler: FFIOperationHandler<FFIFileIOWriteOutcomeListen
     ) -> Result<(), FFISideError>;
 }
 
-impl<U: FFIFileIOWriteHandler> FFIOperationHandler<FFIFileIOWriteOutcomeListener> for U {
-    fn execute_operation(
+impl<U: FFIFileIOWriteExecutor> FFIOperationExecutor<FFIFileIOWriteOutcomeListener> for U {
+    fn execute_request(
         &self,
-        operation: <FFIFileIOWriteOutcomeListener as IsOutcomeListener>::Request,
+        request: <FFIFileIOWriteOutcomeListener as IsOutcomeListener>::Request,
         listener_rust_side: FFIFileIOWriteOutcomeListener,
     ) -> Result<(), FFISideError> {
-        self.execute_file_io_write_request(operation, listener_rust_side.into())
+        self.execute_file_io_write_request(request, listener_rust_side.into())
     }
 }

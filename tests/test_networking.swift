@@ -67,8 +67,8 @@ extension NetworkRequest {
   }
 }
 
-// Conform `[Swift]URLSession` to `[Rust]FfiNetworkingHandler`
-extension URLSession: FfiNetworkingHandler {
+// Conform `[Swift]URLSession` to `[Rust]FfiNetworkingExecutor`
+extension URLSession: FfiNetworkingExecutor {
   public func executeNetworkRequest(
     request rustRequest: NetworkRequest,
     listenerRustSide: FfiNetworkingOutcomeListener
@@ -106,7 +106,7 @@ public final class Async<Request, Intermediary, Response> {
   }
 }
 
-extension Async: FfiNetworkingHandler
+extension Async: FfiNetworkingExecutor
 where Request == NetworkRequest, Intermediary == (Data, URLResponse), Response == NetworkResponse {
 
   convenience init(

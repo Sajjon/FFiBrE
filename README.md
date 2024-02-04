@@ -2,11 +2,22 @@
 
 FFiBRe pronounced "fibre" is a **Proof-of-Concept** of bridging between Swift and Rust for async methods.
 
-Showcase of FFI side (Swift side) - executing a Network request called from Rust, implemented with [tokio::oneshot](https://docs.rs/tokio/latest/tokio/sync/oneshot/fn.channel.html).
+I showcase how we can bridge certain operation from Rust to FFI side (Swift side) and read the outcome of these operations in Rust - using callback pattern.
 
-Swift is using `URLSession`'s [`dataTask:with:completionHandler`](https://developer.apple.com/documentation/foundation/urlsession/1407613-datatask) invoked from Rust, and letting Rust side deserialize JSON of the HTTP body and "massage the data" into an REST call result - which is exposed to FFI side (Swift side) as an async fn inside of Rust.
+The implementation uses [tokio::oneshot::channel](https://docs.rs/tokio/latest/tokio/sync/oneshot/fn.channel.html) for the callback.
 
-# Try
+This repo contains three examples:
+
+- Networking
+- File IO Read
+- File IO Write
+
+All examples have two versions:
+
+- Callback based
+- Async wrapped (translated to callback)
+
+# Test
 
 Run test:
 
@@ -17,15 +28,21 @@ cargo test
 Which should output something like:
 
 ```sh
-running 1 test
-    Finished dev [unoptimized + debuginfo] target(s) in 0.21s
-SWIFT ✅ completionCallbackBased balance: 890.88637929049 ✅
-SWIFT ✅ clientAsyncBased balance: 890.88637929049 ✅
-test uniffi_foreign_language_testcase_test_swift ... ok
+🚀🗂️  SWIFT 'test_file_io' start
+✅🗂️  writeToNewOrExtendExistingFile CB outcome: didWrite(alreadyExisted: false)
+✅🗂️  writeToNewOrExtendExistingFile ASYNC outcome: didWrite(alreadyExisted: true)
+✅🗂️  writeToNewOrExtendExistingFile CB outcome: didWrite(alreadyExisted: true)
+🏁🗂️  SWIFT 'test_file_io' done
 
-test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.48s
-
+🚀🛜  SWIFT 'test_networking' start
+🛜 ✅ SWIFT CB balance: 890.88637929049
+🛜 ✅ SWIFT ASYNC balance: 890.88637929049
+🏁🛜  SWIFT 'test_networking' done
 ```
+
+# Design
+
+For each FFI operation you need to declare a `Executor`
 
 # Rust side
 
@@ -33,8 +50,8 @@ test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 /// A handler on the FFI side, which receives request from Rust, executes them
 /// and notifies Rust with the result of the FFI operation.
 #[uniffi::export(with_foreign)]
-pub trait FFIOperationHandler: Send + Sync {
-    fn execute_operation(
+pub trait FFIOperationExecutor: Send + Sync {
+    fn execute_request(
         &self,
         operation: FFIOperation,
         listener_rust_side: Arc<FFIOperationOutcomeListener>,
@@ -58,14 +75,14 @@ impl FFIOperationOutcomeListener {
 }
 ```
 
-The `FFIOperationHandler` is used by a `FFIOperationDispatcher`.
+The `FFIOperationExecutor` is used by a `FFIOperationDispatcher`.
 
 ```rust,no_run
 #[derive(Object)]
 pub struct FFIOperationDispatcher {
     /// Handler FFI side, receiving operations from us (Rust side),
     /// and passes result of the operation back to us (Rust side).
-    pub handler: Arc<dyn FFIOperationHandler>,
+    pub handler: Arc<dyn FFIOperationExecutor>,
 }
 
 impl FFIOperationDispatcher {
@@ -78,7 +95,7 @@ impl FFIOperationDispatcher {
 
         // Make request
         self.handler
-            .execute_operation(
+            .execute_request(
                 // Pass operation to Swift to make
                 operation,
                 // Pass callback, Swift will call `result_listener.notify_outcome`
@@ -165,7 +182,7 @@ extension NetworkRequest {
 
 ```swift
 // Turn `URLSession` into a "network antenna" for Rust
-extension URLSession: FfiOperationHandler {
+extension URLSession: FfiOperationExecutor {
 	public func executeOperation(
 		operation rustOperation: FfiOperation,
 		listenerRustSide: FfiDataOutcomeListener
@@ -209,7 +226,7 @@ print("SWIFT ✅ getXrdBalanceOfAccount success, got balance: \(balance) ✅")
 
 ## Async based
 
-But it gets better! We can perform an async call in a Swift `Task` and let a holder of it implement the `FfiOperationHandler` trait!
+But it gets better! We can perform an async call in a Swift `Task` and let a holder of it implement the `FfiOperationExecutor` trait!
 
 ```swift
 public final class AsyncOperation<T> {
@@ -231,7 +248,7 @@ extension AsyncOperation where T == Data {
 
 }
 
-extension AsyncOperation: FfiOperationHandler {
+extension AsyncOperation: FfiOperationExecutor {
 	public func executeOperation(
 		operation rustOperation: FfiOperation,
 		listenerRustSide: FfiDataOutcomeListener

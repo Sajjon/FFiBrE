@@ -26,7 +26,7 @@ impl FFINetworkingOutcomeListener {
 #[export]
 impl FFINetworkingOutcomeListener {
     /// This is called from FFI Side (Swift side), inside the implementation of
-    /// an `execute_network_request:request:listener_rust_side` method on a [`FFINetworkingHandler`],
+    /// an `execute_network_request:request:listener_rust_side` method on a [`FFINetworkingExecutor`],
     /// when the operation has finished, with the [`FFINetworkingOutcome`].
     fn notify_outcome(&self, result: FFINetworkingOutcome) {
         self.result_listener.notify_outcome(result.into())

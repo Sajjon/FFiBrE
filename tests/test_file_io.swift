@@ -97,7 +97,7 @@ public final class Async<Request, Intermediary, Response> {
   }
 }
 
-extension Async: FfiFileIoReadHandler
+extension Async: FfiFileIoReadExecutor
 where Request == FfiFileIoReadRequest, Intermediary == Data?, Response == FfiFileIoReadResponse {
 
   convenience init(
@@ -128,7 +128,7 @@ where Request == FfiFileIoReadRequest, Intermediary == Data?, Response == FfiFil
   }
 }
 
-extension Async: FfiFileIoWriteHandler
+extension Async: FfiFileIoWriteExecutor
 where
   Request == FfiFileIoWriteRequest, Intermediary == FfiFileIoWriteResponse,
   Response == FfiFileIoWriteResponse
@@ -177,7 +177,7 @@ public final class CallbackBasedFileManager {
   }
   static let shared = CallbackBasedFileManager()
 }
-extension CallbackBasedFileManager: FfiFileIoReadHandler {
+extension CallbackBasedFileManager: FfiFileIoReadExecutor {
   func read(absolutePath: String, callback: @escaping (FfiFileIoReadOutcome) -> Void) {
     guard let fileHandle = FileHandle(forReadingAtPath: absolutePath) else {
       return callback(
@@ -214,7 +214,7 @@ extension CallbackBasedFileManager: FfiFileIoReadHandler {
   }
 }
 
-extension CallbackBasedFileManager: FfiFileIoWriteHandler {
+extension CallbackBasedFileManager: FfiFileIoWriteExecutor {
   func write(
     contents: Data,
     to absolutePath: String,

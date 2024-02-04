@@ -26,7 +26,7 @@ impl FFIFileIOReadOutcomeListener {
 #[export]
 impl FFIFileIOReadOutcomeListener {
     /// This is called from FFI Side (Swift side), inside the implementation of
-    /// an `execute_file_io_read:request:listener_rust_side` method on a [`FFIOperationHandler`],
+    /// an `execute_file_io_read:request:listener_rust_side` method on a [`FFIOperationExecutor`],
     /// when the operation has finished, with the [`FFIFileIOReadOutcome`].
     fn notify_outcome(&self, result: FFIFileIOReadOutcome) {
         self.result_listener.notify_outcome(result.into())

@@ -1,7 +1,7 @@
 use crate::prelude::*;
 
 #[uniffi::export(with_foreign)]
-pub trait FFINetworkingHandler: FFIOperationHandler<FFINetworkingOutcomeListener> {
+pub trait FFINetworkingExecutor: FFIOperationExecutor<FFINetworkingOutcomeListener> {
     /// Rust will tell the handler to execute `operation` by calling this
     /// function, which a concrete type FFI side (Swift side) has implemented.
     /// Once the operation has finished with a result (Success/Failure) it
@@ -13,12 +13,12 @@ pub trait FFINetworkingHandler: FFIOperationHandler<FFINetworkingOutcomeListener
     ) -> Result<(), FFISideError>;
 }
 
-impl<U: FFINetworkingHandler> FFIOperationHandler<FFINetworkingOutcomeListener> for U {
-    fn execute_operation(
+impl<U: FFINetworkingExecutor> FFIOperationExecutor<FFINetworkingOutcomeListener> for U {
+    fn execute_request(
         &self,
-        operation: <FFINetworkingOutcomeListener as IsOutcomeListener>::Request,
+        request: <FFINetworkingOutcomeListener as IsOutcomeListener>::Request,
         listener_rust_side: FFINetworkingOutcomeListener,
     ) -> Result<(), FFISideError> {
-        self.execute_network_request(operation, listener_rust_side.into())
+        self.execute_network_request(request, listener_rust_side.into())
     }
 }

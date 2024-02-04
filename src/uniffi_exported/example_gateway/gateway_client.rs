@@ -10,10 +10,10 @@ pub struct GatewayClient {
 #[export]
 impl GatewayClient {
     /// Constructs a new [`GatewayClient`] using a "network antenna" - a type
-    /// implementing [`FFIOperationHandler`] on the FFI side (Swift side), e.g.
+    /// implementing [`FFIOperationExecutor`] on the FFI side (Swift side), e.g.
     /// `[Swift]URLSession` which wraps the execution of a network call.
     #[uniffi::constructor]
-    pub fn new(network_antenna: Arc<dyn FFINetworkingHandler>) -> Self {
+    pub fn new(network_antenna: Arc<dyn FFINetworkingExecutor>) -> Self {
         Self {
             networking_dispatcher: FFIOperationDispatcher::<FFINetworkingOutcomeListener>::new(
                 network_antenna,

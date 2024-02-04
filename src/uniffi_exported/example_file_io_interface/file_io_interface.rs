@@ -10,8 +10,8 @@ pub struct FileIOInterface {
 impl FileIOInterface {
     #[uniffi::constructor]
     pub fn new(
-        file_writer: Arc<dyn FFIFileIOWriteHandler>,
-        file_reader: Arc<dyn FFIFileIOReadHandler>,
+        file_writer: Arc<dyn FFIFileIOWriteExecutor>,
+        file_reader: Arc<dyn FFIFileIOReadExecutor>,
     ) -> Self {
         Self {
             writer: FFIOperationDispatcher::<FFIFileIOWriteOutcomeListener>::new(file_writer),

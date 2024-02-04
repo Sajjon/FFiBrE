@@ -45,8 +45,8 @@ pub enum RustSideError {
     #[error("HTTP Body of response from Swift was nil")]
     ResponseBodyWasNil,
 
-    #[error("Wrong response kind from FFIOperationOk, expected NetworkResponse")]
-    WrongFFIOperationOKExpectedNetworkResponse,
+    #[error("Wrong response kind from FFIOperationOk, expected FFINetworkingResponse")]
+    WrongFFIOperationOKExpectedFFINetworkingResponse,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, ThisError, Error)]

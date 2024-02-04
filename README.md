@@ -42,19 +42,25 @@ Which should output something like:
 
 # Design
 
-For each FFI operation you need to declare a `Executor`
+For each FFI interface you need to declare:
 
-# Rust side
+- Request - some operation we want the FFI side to execute using the `executor` (see below).
+- Response (`Ok` value) - some value produced by the `executor` as a response to the `request`.
+- Failure (`Error` value) - a type representing all kinds of failures that can happen FFI side during the `executor`s running of the request.
+- Outcome (`Result<Response, Failure>`) - a result type aggregating both responses and failures, which the `executor` pass back to the `outcomeListener` using `notifyOutcome`.
+- OutcomeListener - which has a single function the FFI side's executor (see below) should invoke, named `notifyOutcome`
+- Executor - a (request, outcomeListener) receiver FFI side which is responsible for executing the `request` and sends back the outcome using the provided `outcomeListener`.
+- Some async fn Rust side which builds the request, creates an `outcomeListener` and dispatches the `request` to the `executor` and awaits the `notifyOutcome` call on the `outcomeListener`, e.g. `async fn login_user`
+
+# Networking demo
 
 ```rust,no_run
-/// A handler on the FFI side, which receives request from Rust, executes them
-/// and notifies Rust with the result of the FFI operation.
 #[uniffi::export(with_foreign)]
-pub trait FFIOperationExecutor: Send + Sync {
-    fn execute_request(
+pub trait FFINetworkingExecutor: FFIOperationExecutor<FFINetworkingOutcomeListener> {
+    fn execute_network_request(
         &self,
-        operation: FFIOperation,
-        listener_rust_side: Arc<FFIOperationOutcomeListener>,
+        request: FFINetworkingRequest,
+        listener_rust_side: Arc<FFINetworkingOutcomeListener>,
     ) -> Result<(), FFISideError>;
 }
 ```
@@ -129,7 +135,7 @@ impl GatewayClient {
     ) -> Result<U, Error> {
 
         let body = serde_json::to_vec(request)?;
-        let network_request = NetworkRequest {
+        let network_request = FFINetworkingRequest {
             url,
             body,
             method: ..
@@ -160,14 +166,14 @@ impl GatewayClient {
 
 # Swift Side
 
-Translate NetworkRequest -> `URLRequest`
+Translate FFINetworkingRequest -> `URLRequest`
 
 ```swift
 import Foundation
 import ffibre
 
-// Convert `[Rust]NetworkRequest` to `[Swift]URLRequest`
-extension NetworkRequest {
+// Convert `[Rust]FFINetworkingRequest` to `[Swift]URLRequest`
+extension FFINetworkingRequest {
 	func urlRequest(url: URL) -> URLRequest {
 		var request = URLRequest(url: url)
 		request.httpMethod = self.method
@@ -273,7 +279,7 @@ Now ready to be used!
 ```swift
 let gatewayClient = GatewayClient(
     networkAntenna: AsyncOperation {
-      try await urlSession.data(for: $0.asNetworkRequest.urlRequest()).0
+      try await urlSession.data(for: $0.asFFINetworkingRequest.urlRequest()).0
     }
 )
 let balance = try await gatewayClient.getXrdBalanceOfAccount(address: "account_rdx...")

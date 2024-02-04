@@ -39,7 +39,7 @@ impl GatewayClient {
 }
 
 impl GatewayClient {
-    fn model_from_response<U>(&self, response: NetworkResponse) -> Result<U, RustSideError>
+    fn model_from_response<U>(&self, response: FFINetworkingResponse) -> Result<U, RustSideError>
     where
         U: for<'a> Deserialize<'a>,
     {
@@ -82,7 +82,7 @@ impl GatewayClient {
 
         // Create Network request object, which will be translated by
         // Swift side into a `[Swift]URLRequest`
-        let request = NetworkRequest {
+        let request = FFINetworkingRequest {
             url,
             body,
             method: method.as_ref().to_owned(),

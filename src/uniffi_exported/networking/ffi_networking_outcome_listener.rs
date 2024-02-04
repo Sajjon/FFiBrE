@@ -5,8 +5,8 @@ pub struct FFINetworkingOutcomeListener {
     result_listener: FFIOperationOutcomeListener<FFINetworkingOutcome>,
 }
 impl IsOutcomeListener for FFINetworkingOutcomeListener {
-    type Request = NetworkRequest;
-    type Response = NetworkResponse;
+    type Request = FFINetworkingRequest;
+    type Response = FFINetworkingResponse;
     type Failure = FFINetworkingError;
     type Outcome = FFINetworkingOutcome;
 }

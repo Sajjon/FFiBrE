@@ -2,13 +2,9 @@ use crate::prelude::*;
 
 #[uniffi::export(with_foreign)]
 pub trait FFINetworkingExecutor: FFIOperationExecutor<FFINetworkingOutcomeListener> {
-    /// Rust will tell the handler to execute `operation` by calling this
-    /// function, which a concrete type FFI side (Swift side) has implemented.
-    /// Once the operation has finished with a result (Success/Failure) it
-    /// passes back the result using the `listener_rust_side` callback.
-    fn execute_network_request(
+    fn execute_networking_request(
         &self,
-        request: NetworkRequest,
+        request: FFINetworkingRequest,
         listener_rust_side: Arc<FFINetworkingOutcomeListener>,
     ) -> Result<(), FFISideError>;
 }
@@ -19,6 +15,6 @@ impl<U: FFINetworkingExecutor> FFIOperationExecutor<FFINetworkingOutcomeListener
         request: <FFINetworkingOutcomeListener as IsOutcomeListener>::Request,
         listener_rust_side: FFINetworkingOutcomeListener,
     ) -> Result<(), FFISideError> {
-        self.execute_network_request(request, listener_rust_side.into())
+        self.execute_networking_request(request, listener_rust_side.into())
     }
 }

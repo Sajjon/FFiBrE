@@ -6,12 +6,12 @@ use crate::prelude::*;
 /// or a `Success` (data).
 #[derive(Enum, Clone, Debug)]
 pub enum FFINetworkingOutcome {
-    Success { value: NetworkResponse },
+    Success { value: FFINetworkingResponse },
     Failure { error: FFINetworkingError },
 }
 
-impl Into<Result<NetworkResponse, FFINetworkingError>> for FFINetworkingOutcome {
-    fn into(self) -> Result<NetworkResponse, FFINetworkingError> {
+impl Into<Result<FFINetworkingResponse, FFINetworkingError>> for FFINetworkingOutcome {
+    fn into(self) -> Result<FFINetworkingResponse, FFINetworkingError> {
         match self {
             Self::Success { value } => Ok(value),
             Self::Failure { error } => Err(error),

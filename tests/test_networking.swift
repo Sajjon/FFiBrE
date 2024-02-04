@@ -4,7 +4,7 @@ import ffibre
 /* Some bug in UniFFI not marking the `uniffi::Error` as `Swift.Error`... */
 extension FfiNetworkingError: Swift.Error {}
 
-extension NetworkResponse {
+extension FfiNetworkingResponse {
   init(data: Data, urlResponse: URLResponse) {
     guard let httpUrlResponse = urlResponse as? HTTPURLResponse else {
       fatalError("Expected URLResponse to always be HTTPURLResponse")
@@ -45,12 +45,12 @@ extension FfiNetworkingOutcome {
     guard let urlResponse else {
       fatalError("Expected URLResponse to always be present if error is nil and data is some.")
     }
-    return .success(value: NetworkResponse(data: data, urlResponse: urlResponse))
+    return .success(value: FfiNetworkingResponse(data: data, urlResponse: urlResponse))
   }
 }
 
-extension NetworkRequest {
-  // Convert `[Rust]NetworkRequest` to `[Swift]URLRequest`
+extension FfiNetworkingRequest {
+  // Convert `[Rust]FfiNetworkingRequest` to `[Swift]URLRequest`
   func urlRequest(url: URL) -> URLRequest {
     var request = URLRequest(url: url)
     request.httpMethod = self.method
@@ -69,8 +69,8 @@ extension NetworkRequest {
 
 // Conform `[Swift]URLSession` to `[Rust]FfiNetworkingExecutor`
 extension URLSession: FfiNetworkingExecutor {
-  public func executeNetworkRequest(
-    request rustRequest: NetworkRequest,
+  public func executeNetworkingRequest(
+    request rustRequest: FfiNetworkingRequest,
     listenerRustSide: FfiNetworkingOutcomeListener
   ) throws {
     guard let url = URL(string: rustRequest.url) else {
@@ -107,21 +107,24 @@ public final class Async<Request, Intermediary, Response> {
 }
 
 extension Async: FfiNetworkingExecutor
-where Request == NetworkRequest, Intermediary == (Data, URLResponse), Response == NetworkResponse {
+where
+  Request == FfiNetworkingRequest, Intermediary == (Data, URLResponse),
+  Response == FfiNetworkingResponse
+{
 
   convenience init(
     call op: @escaping (URLRequest) async throws -> Intermediary
   ) {
     self.init(
-      operation: { (rustRequest: NetworkRequest) in try await op(rustRequest.urlRequest()) },
+      operation: { (rustRequest: FfiNetworkingRequest) in try await op(rustRequest.urlRequest()) },
       mapToResponse: { (data: Data, urlResponse: URLResponse) in
-        NetworkResponse(data: data, urlResponse: urlResponse)
+        FfiNetworkingResponse(data: data, urlResponse: urlResponse)
       }
     )
   }
 
-  public func executeNetworkRequest(
-    request rustRequest: NetworkRequest,
+  public func executeNetworkingRequest(
+    request rustRequest: FfiNetworkingRequest,
     listenerRustSide: FfiNetworkingOutcomeListener
   ) throws {
     self.task = Task {

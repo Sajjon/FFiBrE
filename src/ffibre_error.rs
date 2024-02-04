@@ -14,6 +14,12 @@ pub enum FFISideError {
         #[from]
         error: FFIFileIOWriteError,
     },
+
+    #[error(transparent)]
+    FileIORead {
+        #[from]
+        error: FFIFileIOReadError,
+    },
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, ThisError, Error)]

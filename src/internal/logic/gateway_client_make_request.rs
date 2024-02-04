@@ -1,6 +1,7 @@
 use crate::prelude::*;
 
 impl GatewayClient {
+
     fn model_from_response<U>(&self, response: NetworkResponse) -> Result<U, RustSideError>
     where
         U: for<'a> Deserialize<'a>,
@@ -55,10 +56,7 @@ impl GatewayClient {
         };
 
         // Let Swift side make network request and await response
-        let response = self
-            .network_dispatcher
-            .dispatch_network_request(request)
-            .await?;
+        let response = self.networking_dispatcher.dispatch(request).await?;
 
         // Read out HTTP body from response and JSON parse it into U
         let model = self
@@ -68,9 +66,7 @@ impl GatewayClient {
         // Map U -> V
         map(model).map_err(|e| e.into())
     }
-}
 
-impl GatewayClient {
     /// Makes a HTTP POST request using `http_client`, which in turn uses
     /// DeviceNetworkAntenna "installed" from Swift.
     pub(crate) async fn post<T, U, V, F, E>(

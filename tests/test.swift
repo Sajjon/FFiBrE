@@ -3,6 +3,7 @@ import ffibre
 
 extension FfiNetworkingError: Swift.Error {} /* Some bug in UniFFI... */
 extension FfiFileIoWriteError: Swift.Error {} /* Some bug in UniFFI... */
+extension FfiFileIoReadError: Swift.Error {} /* Some bug in UniFFI... */
 
 extension NetworkResponse {
   init(data: Data, urlResponse: URLResponse) {
@@ -139,16 +140,118 @@ where Request == NetworkRequest, Intermediary == (Data, URLResponse), Response =
   }
 }
 
-func test_write_file() async throws {
-  print("🚀 SWIFT 'test_write_file' start")
-  defer { print("🏁 SWIFT 'test_write_file' done") }
-  try "Hej".write(toFile: "safe_to_delete.txt", atomically: false, encoding: .utf8)
+// extension FileManager {
+//   func write(request: FfiFileIoWriteRequest) async throws -> FfiFileIoWriteResponse {
+//     let currentDir = currentDirectoryPath
+//       try "Hej".write(toFile: "safe_to_delete.txt", atomically: false, encoding: .utf8)
+//   }
+// }
+
+public final class SimpleFileManager {
+  private let queue: DispatchQueue
+  private init() {
+    self.queue = DispatchQueue(
+      label: "simpleFileManagerQueue",
+      qos: .background,
+      target: nil
+    )
+  }
+  static let shared = SimpleFileManager()
+}
+extension SimpleFileManager: FfiFileIoReadHandler {
+  public func read(absolutePath: String, callback: @escaping (FfiFileIoReadResult) -> Void) {
+    print("🪲 SWIFT SimpleFileManager read: '\(absolutePath)'")
+    guard let fileHandle = FileHandle(forReadingAtPath: absolutePath) else {
+      return callback(
+        FfiFileIoReadResult.success(value: .doesNotExist(absolutePath: absolutePath)))
+    }
+    queue.async {
+      let result: FfiFileIoReadResult
+      do {
+        if let contents = try fileHandle.readToEnd() {
+          result = .success(
+            value: .exists(
+              file: FfiFileIoReadResponseFileExists(
+                absolutePath: absolutePath,
+                contents: contents)
+            )
+          )
+        } else {
+          result = .success(value: .doesNotExist(absolutePath: absolutePath))
+        }
+      } catch {
+        result = .failure(error: .unknown(underlying: String(describing: error)))
+      }
+      DispatchQueue.main.async {
+        callback(result)
+      }
+    }
+  }
+
+  public func read(absolutePath: String) async throws -> Data? {
+    try await withCheckedThrowingContinuation { continuation in
+      self.read(absolutePath: absolutePath) { result in
+        switch result {
+        case let .success(response):
+          switch response {
+          case .exists(let file):
+            continuation.resume(returning: file.contents)
+          case .doesNotExist:
+            continuation.resume(returning: nil)
+          }
+        case let .failure(error):
+          continuation.resume(throwing: error)
+        }
+      }
+    }
+  }
+  public func executeFileIoReadRequest(
+    request: FfiFileIoReadRequest,
+    listenerRustSide: FfiFileIoReadResultListener
+  ) throws {
+    self.read(absolutePath: request.absolutePath) { result in
+      listenerRustSide.notifyResult(result: result)
+    }
+  }
+}
+
+extension SimpleFileManager: FfiFileIoWriteHandler {
+  public func executeFileIoWriteRequest(
+    request: FfiFileIoWriteRequest,
+    listenerRustSide: FfiFileIoWriteResultListener
+  ) throws {
+    print("🐌 SWIFT write request ignored")
+    listenerRustSide.notifyResult(result: .failure(error: .unknown(underlying: "😅Not yet implemented")))
+  }
+}
+
+func test_file_io() async throws {
+  print("🚀 SWIFT 'test_file_io' start")
+  defer { print("🏁 SWIFT 'test_file_io' done") }
+  let fileIoInterfaceCallbackBased = FileIoInterface(
+    fileWriter: SimpleFileManager.shared,
+    fileReader: SimpleFileManager.shared
+  )
+  /*
+      pub async fn write_to_new_or_extend_existing_file(
+        &self,
+        file_absolute_path: String,
+        extend_strategy: ExtendExistingFileStrategy,
+        contents: Vec<u8>,
+    ) -> Result<bool, FFIBridgeError> {
+  */
+  let existed = try await fileIoInterfaceCallbackBased.writeToNewOrExtendExistingFile(
+    fileAbsolutePath: "\(FileManager.default.currentDirectoryPath)/safeToRemove.txt",
+    extendStrategy: .append,
+    contents: "Hej fran bindgen test".data(using: .utf8)!
+  )
+  print("✅ writeToNewOrExtendExistingFile existed: \(existed)")
 }
 
 func test() async throws {
   print("🚀 SWIFT 'test' start")
   defer { print("🏁 SWIFT 'test' done") }
-  try await test_write_file()
+  try await test_file_io()
   let urlSession = URLSession.shared
 
   let clientCompletionCallbackBased = GatewayClient(

@@ -4,13 +4,13 @@ use crate::prelude::*;
 /// handler from FFI side (Swift side) of type [`FFIOperationHandler`],
 /// it can e.g. be `URLSession` in Swift which supports making network
 /// calls.
-pub struct FFIOperationDispatcher<L: IsResultListener> {
+pub struct FFIOperationDispatcher<L: IsOutcomeListener> {
     /// Handler FFI side, receiving operations from us (Rust side),
     /// and passes result of the operation back to us (Rust side).
     pub handler: Arc<dyn FFIOperationHandler<L>>,
 }
 
-impl<L: IsResultListener> FFIOperationDispatcher<L> {
+impl<L: IsOutcomeListener> FFIOperationDispatcher<L> {
     /// Create a new dispatcher with a handler originally passed to Rust
     /// from FFI side (Swift side), e.g. a `URLSession` which implements
     /// the [`FFIOperationHandler`] trait (Swift: conforms to the `FFIOperationHandler`
@@ -19,23 +19,23 @@ impl<L: IsResultListener> FFIOperationDispatcher<L> {
     pub fn new(handler: Arc<dyn FFIOperationHandler<L>>) -> Self {
         Self { handler }
     }
-    
+
     pub(crate) async fn dispatch(
         &self,
         operation: L::Request,
     ) -> Result<L::Response, FFIBridgeError> {
         // Underlying tokio channel used to get result from Swift back to Rust.
-        let (sender, receiver) = channel::<L::OpResult>();
+        let (sender, receiver) = channel::<L::Outcome>();
 
         // Our callback we pass to Swift
-        let result_listener = FFIOperationResultListener::new(sender);
+        let result_listener = FFIOperationOutcomeListener::new(sender);
 
         // Make request
         self.handler
             .execute_operation(
                 // Pass operation to Swift to make
                 operation,
-                // Pass callback, Swift will call `result_listener.notify_result`
+                // Pass callback, Swift will call `result_listener.notify_outcome`
                 result_listener.into(),
             )
             .map_err(|e| FFIBridgeError::from(e))?;
@@ -45,7 +45,6 @@ impl<L: IsResultListener> FFIOperationDispatcher<L> {
             error: RustSideError::FailedToReceiveResponseFromSwift,
         })?;
 
-        // Result::<L::Response, FFISideError>::from(response).map_err(|e| e.into())
-        response.into().map_err(|e| e.into())
+        response.into().map_err(|e| e.into().into())
     }
 }

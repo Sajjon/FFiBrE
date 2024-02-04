@@ -4,7 +4,7 @@ use crate::prelude::*;
 /// network request using a "network antenna" 'installed' from FFI Side (Swift side).
 #[derive(Object)]
 pub struct GatewayClient {
-    pub(crate) networking_dispatcher: FFIOperationDispatcher<FFINetworkingResultListener>,
+    pub(crate) networking_dispatcher: FFIOperationDispatcher<FFINetworkingOutcomeListener>,
 }
 
 #[export]
@@ -15,7 +15,7 @@ impl GatewayClient {
     #[uniffi::constructor]
     pub fn new(network_antenna: Arc<dyn FFINetworkingHandler>) -> Self {
         Self {
-            networking_dispatcher: FFIOperationDispatcher::<FFINetworkingResultListener>::new(
+            networking_dispatcher: FFIOperationDispatcher::<FFINetworkingOutcomeListener>::new(
                 network_antenna,
             ),
         }
@@ -39,7 +39,6 @@ impl GatewayClient {
 }
 
 impl GatewayClient {
-
     fn model_from_response<U>(&self, response: NetworkResponse) -> Result<U, RustSideError>
     where
         U: for<'a> Deserialize<'a>,

@@ -2,8 +2,8 @@ use crate::prelude::*;
 
 #[derive(Object)]
 pub struct FileIOInterface {
-    writer: FFIOperationDispatcher<FFIFileIOWriteResultListener>,
-    reader: FFIOperationDispatcher<FFIFileIOReadResultListener>,
+    writer: FFIOperationDispatcher<FFIFileIOWriteOutcomeListener>,
+    reader: FFIOperationDispatcher<FFIFileIOReadOutcomeListener>,
 }
 
 #[export]
@@ -14,8 +14,8 @@ impl FileIOInterface {
         file_reader: Arc<dyn FFIFileIOReadHandler>,
     ) -> Self {
         Self {
-            writer: FFIOperationDispatcher::<FFIFileIOWriteResultListener>::new(file_writer),
-            reader: FFIOperationDispatcher::<FFIFileIOReadResultListener>::new(file_reader),
+            writer: FFIOperationDispatcher::<FFIFileIOWriteOutcomeListener>::new(file_writer),
+            reader: FFIOperationDispatcher::<FFIFileIOReadOutcomeListener>::new(file_reader),
         }
     }
 

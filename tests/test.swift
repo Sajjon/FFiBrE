@@ -42,7 +42,7 @@ extension NetworkResponse {
   }
 }
 
-extension FfiNetworkResult {
+extension FfiNetworkingOutcome {
 
   static func fail(error: Swift.Error, data: Data? = nil, urlResponse: URLResponse? = nil) -> Self {
     func message() -> String? {
@@ -100,18 +100,18 @@ extension NetworkRequest {
 extension URLSession: FfiNetworkingHandler {
   public func executeNetworkRequest(
     request rustRequest: NetworkRequest,
-    listenerRustSide: FfiNetworkingResultListener
+    listenerRustSide: FfiNetworkingOutcomeListener
   ) throws {
     guard let url = URL(string: rustRequest.url) else {
       throw FfiNetworkingError.failedToCreateUrlFrom(string: rustRequest.url)
     }
     let task = dataTask(with: rustRequest.urlRequest(url: url)) { data, urlResponse, error in
-      let result = FfiNetworkResult.with(
+      let result = FfiNetworkingOutcome.with(
         data: data,
         urlResponse: urlResponse,
         error: error
       )
-      listenerRustSide.notifyResult(result: result)
+      listenerRustSide.notifyOutcome(result: result)
     }
     task.resume()
   }
@@ -151,15 +151,15 @@ where Request == NetworkRequest, Intermediary == (Data, URLResponse), Response =
 
   public func executeNetworkRequest(
     request rustRequest: NetworkRequest,
-    listenerRustSide: FfiNetworkingResultListener
+    listenerRustSide: FfiNetworkingOutcomeListener
   ) throws {
     self.task = Task {
       do {
         let intermediary = try await self.operation(rustRequest)
         let response = try await self.mapToResponse(intermediary)
-        listenerRustSide.notifyResult(result: .success(value: response))
+        listenerRustSide.notifyOutcome(result: .success(value: response))
       } catch {
-        listenerRustSide.notifyResult(result: .fail(error: error))
+        listenerRustSide.notifyOutcome(result: .fail(error: error))
       }
     }
   }
@@ -227,15 +227,15 @@ where Request == FfiFileIoReadRequest, Intermediary == Data?, Response == FfiFil
 
   public func executeFileIoReadRequest(
     request rustRequest: FfiFileIoReadRequest,
-    listenerRustSide: FfiFileIoReadResultListener
+    listenerRustSide: FfiFileIoReadOutcomeListener
   ) throws {
     self.task = Task {
       do {
         let intermediary = try await self.operation(rustRequest)
         let response = try await self.mapToResponse(intermediary)
-        listenerRustSide.notifyResult(result: .success(value: response))
+        listenerRustSide.notifyOutcome(result: .success(value: response))
       } catch {
-        listenerRustSide.notifyResult(
+        listenerRustSide.notifyOutcome(
           result: .failure(error: .unknown(underlying: String(describing: error))))
       }
     }
@@ -262,15 +262,15 @@ where
 
   public func executeFileIoWriteRequest(
     request rustRequest: Request,
-    listenerRustSide: FfiFileIoWriteResultListener
+    listenerRustSide: FfiFileIoWriteOutcomeListener
   ) throws {
     self.task = Task {
       do {
         let intermediary = try await self.operation(rustRequest)
         let response = try await self.mapToResponse(intermediary)
-        listenerRustSide.notifyResult(result: .success(value: response))
+        listenerRustSide.notifyOutcome(result: .success(value: response))
       } catch let writeError as FfiFileIoWriteError {
-        listenerRustSide.notifyResult(
+        listenerRustSide.notifyOutcome(
           result: .failure(error: writeError)
         )
       } catch {
@@ -292,14 +292,14 @@ public final class CallbackBasedFileManager {
   static let shared = CallbackBasedFileManager()
 }
 extension CallbackBasedFileManager: FfiFileIoReadHandler {
-  func read(absolutePath: String, callback: @escaping (FfiFileIoReadResult) -> Void) {
+  func read(absolutePath: String, callback: @escaping (FfiFileIoReadOutcome) -> Void) {
     print("🪲 SWIFT SimpleFileManager read: '\(absolutePath)'")
     guard let fileHandle = FileHandle(forReadingAtPath: absolutePath) else {
       return callback(
-        FfiFileIoReadResult.success(value: .doesNotExist))
+        FfiFileIoReadOutcome.success(value: .doesNotExist))
     }
     queue.async {
-      let result: FfiFileIoReadResult
+      let result: FfiFileIoReadOutcome
       do {
         if let contents = try fileHandle.readToEnd() {
           result = .success(
@@ -321,10 +321,10 @@ extension CallbackBasedFileManager: FfiFileIoReadHandler {
 
   public func executeFileIoReadRequest(
     request: FfiFileIoReadRequest,
-    listenerRustSide: FfiFileIoReadResultListener
+    listenerRustSide: FfiFileIoReadOutcomeListener
   ) throws {
     self.read(absolutePath: request.absolutePath) { result in
-      listenerRustSide.notifyResult(result: result)
+      listenerRustSide.notifyOutcome(result: result)
     }
   }
 }
@@ -334,7 +334,7 @@ extension CallbackBasedFileManager: FfiFileIoWriteHandler {
     contents: Data,
     to absolutePath: String,
     abortIfExists: Bool,
-    callback: @escaping (FfiFileIoWriteResult) -> Void
+    callback: @escaping (FfiFileIoWriteOutcome) -> Void
   ) {
     print("🐌 SWIFT SimpleFileManager write: '\(absolutePath)'")
 
@@ -345,7 +345,7 @@ extension CallbackBasedFileManager: FfiFileIoWriteHandler {
     }
 
     queue.async {
-      let result: FfiFileIoWriteResult
+      let result: FfiFileIoWriteOutcome
 
       switch fileHandleOutcome.result {
       case let .failure(error): result = .failure(error: error)
@@ -369,14 +369,14 @@ extension CallbackBasedFileManager: FfiFileIoWriteHandler {
   }
   public func executeFileIoWriteRequest(
     request: FfiFileIoWriteRequest,
-    listenerRustSide: FfiFileIoWriteResultListener
+    listenerRustSide: FfiFileIoWriteOutcomeListener
   ) throws {
     self.write(
       contents: request.contents,
       to: request.absolutePath,
       abortIfExists: request.existsStrategy == .abort
     ) { result in
-      listenerRustSide.notifyResult(result: result)
+      listenerRustSide.notifyOutcome(result: result)
     }
   }
 }

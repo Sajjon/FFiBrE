@@ -37,22 +37,22 @@ pub trait FFIOperationHandler: Send + Sync {
     fn execute_operation(
         &self,
         operation: FFIOperation,
-        listener_rust_side: Arc<FFIOperationResultListener>,
+        listener_rust_side: Arc<FFIOperationOutcomeListener>,
     ) -> Result<(), FFISideError>;
 }
 ```
 
-Where `FFIOperationResultListener` is:
+Where `FFIOperationOutcomeListener` is:
 
 ```rust,no_run
 #[derive(Object)]
-pub struct FFIOperationResultListener {
+pub struct FFIOperationOutcomeListener {
     sender: Mutex<Option<tokio::oneshot::Sender<FFIOperationResult>>>,
 }
 
 #[export]
-impl FFIOperationResultListener {
-    fn notify_result(&self, result: FFIOperationResult) {
+impl FFIOperationOutcomeListener {
+    fn notify_outcome(&self, result: FFIOperationResult) {
        self.sender.send(result) // Pseudocode
     }
 }
@@ -74,14 +74,14 @@ impl FFIOperationDispatcher {
         operation: FFIOperation,
     ) -> Result<Option<Vec<u8>>, FFIBridgeError> {
         let (sender, receiver) = tokio::oneshot::channel::<FFIOperationResult>();
-        let result_listener = FFIOperationResultListener::new(sender);
+        let result_listener = FFIOperationOutcomeListener::new(sender);
 
         // Make request
         self.handler
             .execute_operation(
                 // Pass operation to Swift to make
                 operation,
-                // Pass callback, Swift will call `result_listener.notify_result`
+                // Pass callback, Swift will call `result_listener.notify_outcome`
                 result_listener.into(),
             )
             .map_err(|e| FFIBridgeError::from(e))?;
@@ -168,7 +168,7 @@ extension NetworkRequest {
 extension URLSession: FfiOperationHandler {
 	public func executeOperation(
 		operation rustOperation: FfiOperation,
-		listenerRustSide: FfiDataResultListener
+		listenerRustSide: FfiDataOutcomeListener
 	) throws {
 		guard
 			case let .networking(rustRequest) = rustOperation,
@@ -178,7 +178,7 @@ extension URLSession: FfiOperationHandler {
 		}
 		dataTask(with: rustRequest.urlRequest(url: url)) { body, urlResponse, error in
 			// Notify Rust with result
-			listenerRustSide.notifyResult(
+			listenerRustSide.notifyOutcome(
 				{
 					guard
 						let httpResponse = urlResponse as? HTTPURLResponse,
@@ -234,15 +234,15 @@ extension AsyncOperation where T == Data {
 extension AsyncOperation: FfiOperationHandler {
 	public func executeOperation(
 		operation rustOperation: FfiOperation,
-		listenerRustSide: FfiDataResultListener
+		listenerRustSide: FfiDataOutcomeListener
 	) throws {
 		self.task = Task {
 			do {
 				let result = try await self.operation(rustOperation)
 				let data = try await self.mapToData(result)
-				listenerRustSide.notifyResult(result: .success(value: data))
+				listenerRustSide.notifyOutcome(result: .success(value: data))
 			} catch {
-				listenerRustSide.notifyResult(result: .failure(error: ...))
+				listenerRustSide.notifyOutcome(result: .failure(error: ...))
 			}
 		}
 	}

@@ -5,16 +5,16 @@ use crate::prelude::*;
 /// the result of an [`FFIOperation`] back to Rust land, i.e. either a `Failure`
 /// or a `Success` (data).
 #[derive(Enum, Clone, Debug)]
-pub enum FFINetworkResult {
+pub enum FFINetworkingOutcome {
     Success { value: NetworkResponse },
     Failure { error: FFINetworkingError },
 }
 
-impl Into<Result<NetworkResponse, FFISideError>> for FFINetworkResult {
-    fn into(self) -> Result<NetworkResponse, FFISideError> {
+impl Into<Result<NetworkResponse, FFINetworkingError>> for FFINetworkingOutcome {
+    fn into(self) -> Result<NetworkResponse, FFINetworkingError> {
         match self {
             Self::Success { value } => Ok(value),
-            Self::Failure { error } => Err(error.into()),
+            Self::Failure { error } => Err(error),
         }
     }
 }

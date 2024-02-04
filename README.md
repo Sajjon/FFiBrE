@@ -54,10 +54,46 @@ For each FFI interface you need to declare:
 
 # Networking demo
 
+## Rust side
+
+```rust,no_run
+#[derive(Record)]
+pub struct FFINetworkingRequest {
+    pub url: String,
+    pub method: String,
+    pub headers: HashMap<String, String>,
+
+    pub body: Vec<u8>,
+}
+
+#[derive(Record)]
+pub struct FFINetworkingResponse {
+    pub status_code: u16,
+
+    /// Can be empty.
+    pub body: Vec<u8>,
+}
+
+
+#[derive(uniffi::Error, thiserror::Error)]
+pub enum FFINetworkingError {
+    #[error("Fail to create Swift 'URL''")]
+    FailedToCreateURL,
+
+    ...
+}
+
+#[derive(Enum)]
+pub enum FFINetworkingOutcome {
+    Success { value: FFINetworkingResponse },
+    Failure { error: FFINetworkingError },
+}
+```
+
 ```rust,no_run
 #[uniffi::export(with_foreign)]
 pub trait FFINetworkingExecutor: FFIOperationExecutor<FFINetworkingOutcomeListener> {
-    fn execute_network_request(
+    fn execute_networking_request(
         &self,
         request: FFINetworkingRequest,
         listener_rust_side: Arc<FFINetworkingOutcomeListener>,
@@ -65,56 +101,25 @@ pub trait FFINetworkingExecutor: FFIOperationExecutor<FFINetworkingOutcomeListen
 }
 ```
 
-Where `FFIOperationOutcomeListener` is:
+Where `FFINetworkingOutcomeListener` is:
 
 ```rust,no_run
 #[derive(Object)]
-pub struct FFIOperationOutcomeListener {
-    sender: Mutex<Option<tokio::oneshot::Sender<FFIOperationResult>>>,
+pub struct FFINetworkingOutcomeListener {
+    result_listener: FFIOperationOutcomeListener<FFINetworkingOutcome>,
+}
+
+impl IsOutcomeListener for FFINetworkingOutcomeListener {
+    type Request = FFINetworkingRequest;
+    type Response = FFINetworkingResponse;
+    type Failure = FFINetworkingError;
+    type Outcome = FFINetworkingOutcome;
 }
 
 #[export]
-impl FFIOperationOutcomeListener {
-    fn notify_outcome(&self, result: FFIOperationResult) {
-       self.sender.send(result) // Pseudocode
-    }
-}
-```
-
-The `FFIOperationExecutor` is used by a `FFIOperationDispatcher`.
-
-```rust,no_run
-#[derive(Object)]
-pub struct FFIOperationDispatcher {
-    /// Handler FFI side, receiving operations from us (Rust side),
-    /// and passes result of the operation back to us (Rust side).
-    pub handler: Arc<dyn FFIOperationExecutor>,
-}
-
-impl FFIOperationDispatcher {
-    pub(crate) async fn dispatch(
-        &self,
-        operation: FFIOperation,
-    ) -> Result<Option<Vec<u8>>, FFIBridgeError> {
-        let (sender, receiver) = tokio::oneshot::channel::<FFIOperationResult>();
-        let result_listener = FFIOperationOutcomeListener::new(sender);
-
-        // Make request
-        self.handler
-            .execute_request(
-                // Pass operation to Swift to make
-                operation,
-                // Pass callback, Swift will call `result_listener.notify_outcome`
-                result_listener.into(),
-            )
-            .map_err(|e| FFIBridgeError::from(e))?;
-
-        // Await response from Swift
-        let response: FFIOperationResult = receiver.await?;
-
-        // Map response from Swift -> Result<Option<Vec<u8>>, FFIBridgeError>,
-        // keeping any errors happening in Swift intact.
-        Result::<Option<Vec<u8>>, FFISideError>::from(response).map_err(|e| e.into())
+impl FFINetworkingOutcomeListener {
+    fn notify_outcome(&self, result: FFINetworkingOutcome) {
+        self.result_listener.notify_outcome(result.into())
     }
 }
 ```
@@ -124,8 +129,9 @@ Which allows us to build an async method e.g. a REST API endpoint, where JSON de
 ```rust,no_run
 #[derive(Object)]
 pub struct GatewayClient {
-    pub(crate) request_dispatcher: Arc<FFIOperationDispatcher>,
+    pub(crate) networking_dispatcher: FFIOperationDispatcher<FFINetworkingOutcomeListener>,
 }
+
 
 impl GatewayClient {
     func make_request<T: Serialize, U: Deserialize>(
@@ -135,17 +141,16 @@ impl GatewayClient {
     ) -> Result<U, Error> {
 
         let body = serde_json::to_vec(request)?;
-        let network_request = FFINetworkingRequest {
+        let request = FFINetworkingRequest {
             url,
             body,
             method: ..
             headers: ..
         };
 
-        let ffi_operation = FFIOperation::Networking { request: request };
 
         // Let Swift side make network request and await response
-        let response = self.request_dispatcher.dispatch(ffi_operation).await?;
+        let response = self.networking_dispatcher.dispatch(request).await?;
 
         serde_json::from_slice<U>(response)?;
     }
@@ -162,6 +167,50 @@ impl GatewayClient {
         .await
     }
 }
+```
+
+## Swift Side
+
+## Internals
+
+The `FFINetworkingExecutor` is used by a `FFIOperationDispatcher`.
+
+```rust,no_run
+pub struct FFIOperationDispatcher<L: IsOutcomeListener> {
+    pub executor: Arc<dyn FFIOperationExecutor<L>>,
+}
+
+impl<L: IsOutcomeListener> FFIOperationDispatcher<L> {
+
+    pub(crate) async fn dispatch(
+        &self,
+        operation: L::Request,
+    ) -> Result<L::Response, FFIBridgeError> {
+        // Underlying tokio channel used to get result from Swift back to Rust.
+        let (sender, receiver) = channel::<L::Outcome>();
+
+        // Our callback we pass to Swift
+        let outcome_listener = FFIOperationOutcomeListener::new(sender);
+
+        // Make request
+        self.executor
+            .execute_request(
+                // Pass operation to Swift to make
+                operation,
+                // Pass callback, Swift will call `outcome_listener.notify_outcome`
+                outcome_listener.into(),
+            )
+            .map_err(|e| FFIBridgeError::from(e))?;
+
+        // Await response from Swift
+        let response = receiver.await.map_err(|_| FFIBridgeError::FromRust {
+            error: RustSideError::FailedToReceiveResponseFromSwift,
+        })?;
+
+        response.into().map_err(|e| e.into().into())
+    }
+}
+
 ```
 
 # Swift Side
@@ -188,38 +237,31 @@ extension FFINetworkingRequest {
 
 ```swift
 // Turn `URLSession` into a "network antenna" for Rust
-extension URLSession: FfiOperationExecutor {
-	public func executeOperation(
-		operation rustOperation: FfiOperation,
-		listenerRustSide: FfiDataOutcomeListener
+extension URLSession: FfiNetworkingExecutor {
+	public func executeNetworkingRequest(
+		request rustRequest: FfiNetworkingRequest,
+		listenerRustSide: FfiNetworkingOutcomeListener
 	) throws {
-		guard
-			case let .networking(rustRequest) = rustOperation,
-			let url = URL(string: rustRequest.url)
-		else {
-			throw .error ...
+		guard let url = URL(string: rustRequest.url) else {
+			throw FfiNetworkingError.failedToCreateUrlFrom(string: rustRequest.url)
 		}
-		dataTask(with: rustRequest.urlRequest(url: url)) { body, urlResponse, error in
-			// Notify Rust with result
-			listenerRustSide.notifyOutcome(
-				{
-					guard
-						let httpResponse = urlResponse as? HTTPURLResponse,
-						httpResponse.ok
-					else {
-						return .failure(error: ...)
-					}
-					return .success(value: body)
-				}()
+		let task = dataTask(with: rustRequest.urlRequest(url: url)) { data, urlResponse, error in
+			let result = FfiNetworkingOutcome.with(
+				data: data,
+				urlResponse: urlResponse,
+				error: error
 			)
-		}.resume()
+			listenerRustSide.notifyOutcome(result: result)
+		}
+		task.resume()
 	}
 }
+
 ```
 
 Now ready to be used!
 
-### Usage
+## Usage
 
 ```swift
 let gatewayClient = GatewayClient(networkAntenna: URLSession.shared)
@@ -235,9 +277,9 @@ print("SWIFT ✅ getXrdBalanceOfAccount success, got balance: \(balance) ✅")
 But it gets better! We can perform an async call in a Swift `Task` and let a holder of it implement the `FfiOperationExecutor` trait!
 
 ```swift
-public final class AsyncOperation<T> {
-	typealias Operation = (FfiOperation) async throws -> T
-	typealias MapToData = (T) async throws -> Data
+public final class Async<Request, Intermediary, Response> {
+    typealias Operation = (Request) async throws -> Intermediary
+    typealias MapToResponse = (Intermediary) async throws -> Response
 
 	private var task: Task<Void, Never>?
 
@@ -245,23 +287,18 @@ public final class AsyncOperation<T> {
 	let mapToData: MapToData
 }
 
-extension AsyncOperation where T == Data {
-	convenience init(
-		operation: @escaping Operation
-	) {
-		self.init(operation: operation) { $0 }
-	}
-
-}
-
-extension AsyncOperation: FfiOperationExecutor {
-	public func executeOperation(
-		operation rustOperation: FfiOperation,
-		listenerRustSide: FfiDataOutcomeListener
+extension Async: FfiNetworkingExecutor
+where
+  Request == FfiNetworkingRequest, Intermediary == (Data, URLResponse),
+  Response == FfiNetworkingResponse
+{
+	public func executeNetworkingRequest(
+		request rustRequest: FfiNetworkingRequest,
+		listenerRustSide: FfiNetworkingOutcomeListener
 	) throws {
 		self.task = Task {
 			do {
-				let result = try await self.operation(rustOperation)
+				let result = try await self.operation(rustRequest)
 				let data = try await self.mapToData(result)
 				listenerRustSide.notifyOutcome(result: .success(value: data))
 			} catch {
@@ -278,7 +315,7 @@ Now ready to be used!
 
 ```swift
 let gatewayClient = GatewayClient(
-    networkAntenna: AsyncOperation {
+    networkAntenna: Async {
       try await urlSession.data(for: $0.asFFINetworkingRequest.urlRequest()).0
     }
 )

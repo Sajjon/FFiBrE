@@ -56,6 +56,8 @@ For each FFI interface you need to declare:
 
 ## Rust side
 
+### Request/Outcome
+
 ```rust,no_run
 #[derive(Record)]
 pub struct FFINetworkingRequest {
@@ -90,6 +92,8 @@ pub enum FFINetworkingOutcome {
 }
 ```
 
+### `FFINetworkingExecutor`
+
 ```rust,no_run
 #[uniffi::export(with_foreign)]
 pub trait FFINetworkingExecutor: FFIOperationExecutor<FFINetworkingOutcomeListener> {
@@ -101,7 +105,7 @@ pub trait FFINetworkingExecutor: FFIOperationExecutor<FFINetworkingOutcomeListen
 }
 ```
 
-Where `FFINetworkingOutcomeListener` is:
+### `FFINetworkingOutcomeListener`
 
 ```rust,no_run
 #[derive(Object)]
@@ -123,6 +127,8 @@ impl FFINetworkingOutcomeListener {
     }
 }
 ```
+
+#### Dispatch
 
 Which allows us to build an async method e.g. a REST API endpoint, where JSON deserialization happens inside of Rust, and parsing of models into a result.
 
@@ -169,11 +175,7 @@ impl GatewayClient {
 }
 ```
 
-## Swift Side
-
 ## Internals
-
-The `FFINetworkingExecutor` is used by a `FFIOperationDispatcher`.
 
 ```rust,no_run
 pub struct FFIOperationDispatcher<L: IsOutcomeListener> {
@@ -213,7 +215,7 @@ impl<L: IsOutcomeListener> FFIOperationDispatcher<L> {
 
 ```
 
-# Swift Side
+## Swift Side
 
 Translate FFINetworkingRequest -> `URLRequest`
 
@@ -233,7 +235,7 @@ extension FFINetworkingRequest {
 }
 ```
 
-## Completion Handler Callback based
+### Completion Handler Callback based
 
 ```swift
 // Turn `URLSession` into a "network antenna" for Rust
@@ -261,7 +263,7 @@ extension URLSession: FfiNetworkingExecutor {
 
 Now ready to be used!
 
-## Usage
+#### Usage
 
 ```swift
 let gatewayClient = GatewayClient(networkAntenna: URLSession.shared)
@@ -272,7 +274,7 @@ let balance = try await gatewayClient.getXrdBalanceOfAccount(
 print("SWIFT ✅ getXrdBalanceOfAccount success, got balance: \(balance) ✅")
 ```
 
-## Async based
+### Async based
 
 But it gets better! We can perform an async call in a Swift `Task` and let a holder of it implement the `FfiOperationExecutor` trait!
 
@@ -311,7 +313,7 @@ where
 
 Now ready to be used!
 
-### Usage
+#### Usage
 
 ```swift
 let gatewayClient = GatewayClient(

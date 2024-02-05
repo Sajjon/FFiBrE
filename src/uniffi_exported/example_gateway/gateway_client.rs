@@ -1,6 +1,10 @@
-use std::{future::IntoFuture, time::Duration};
-
 use crate::prelude::*;
+use std::borrow::Borrow;
+use std::sync::atomic::AtomicBool;
+use std::time::Duration;
+use serde::de;
+use tokio::task;
+use tokio::time;
 
 /// A [Radix][https://www.radixdlt.com/] Gateway REST client, that makes its
 /// network request using a "network antenna" 'installed' from FFI Side (Swift side).
@@ -39,35 +43,59 @@ impl GatewayClient {
         .await
     }
 
-    // pub fn subscribe_stream_of_latest_transactions(
-    //     &self,
-    //     publisher: Arc<dyn IsTransactionPublisher>,
-    // ) {
-    //     // loop_publish_on(
-    //     //     publisher,
-    //     //     Duration::from_secs(7),
-    //     //     Box::pin(async move { self.halt_and_catch_fire_get_latest_transactions().await }),
-    //     // )
+    pub fn subscribe_stream_of_latest_transactions(
+        &self,
+        publisher: Arc<dyn IsTransactionPublisher>,
+    ) {
+        // loop_publish_on(
+        //     publisher,
+        //     Duration::from_secs(7),
+        //     Box::pin(async move { self.halt_and_catch_fire_get_latest_transactions().await }),
+        // )
 
-    //     let (sender, receiver) = flume::unbounded();
+        /*
+        let (sender, receiver) = flume::unbounded();
 
-    //     // A future that will be spawned.
-    //     let future = self.halt_and_catch_fire_get_latest_transactions();
+        // A future that will be spawned.
+        let future = self.halt_and_catch_fire_get_latest_transactions();
 
-    //     // A function that schedules the task when it gets woken up.
-    //     let schedule = move |runnable| sender.send(runnable).unwrap();
+        // A function that schedules the task when it gets woken up.
+        let schedule = move |runnable| sender.send(runnable).unwrap();
 
-    //     // Construct a task.
-    //     let (runnable, task) = async_task::spawn(future, schedule);
+        // Construct a task.
+        let (runnable, task) = async_task::spawn(future, schedule);
 
-    //     // Push the task into the queue by invoking its schedule function.
-    //     runnable.schedule();
+        // Push the task into the queue by invoking its schedule function.
+        runnable.schedule();
 
-    //     for runnable in receiver {
-    //         runnable.run();
-    //         let apa: u8 = task.await;
-    //     }
-    // }
+        for runnable in receiver {
+            runnable.run();
+            let apa: u8 = task.await;
+        }
+        */
+
+        let cancelled = Arc::new(AtomicBool::new(false));
+        let was_cancelled = cancelled.clone();
+        tokio::runtime::Runtime::new()
+            .unwrap()
+            .handle()
+            .block_on(async {
+                loop {
+                    if was_cancelled.load(std::sync::atomic::Ordering::Relaxed) {
+                        break;
+                    }
+                    println!("Calling Gateway");
+                    let value = self.halt_and_catch_fire_get_latest_transactions().await;
+                    println!("Got response from Gateway => publish value");
+                    publisher.publish_value(value);
+                    println!("Publish value");
+                    let delay = time::Duration::from_secs(2);
+                    println!("Sleeping for {:?}", delay);
+                    tokio::time::sleep(delay).await;
+                    println!("Woke up after sleeping {:?} => looping", delay);
+                }
+            });
+    }
 
     pub async fn halt_and_catch_fire_get_latest_transactions(&self) -> Transaction {
         self.get_latest_transactions()

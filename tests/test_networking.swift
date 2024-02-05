@@ -176,14 +176,56 @@ func test_balance() async throws {
   try await test_async(address: address)
 }
 
-func test_tx_stream() async throws {
+func test_latest_tx() async throws {
   let gatewayClient = GatewayClient(
     networkAntenna: Async(call: URLSession.shared.data(for:))
   )
   let transactions = try await gatewayClient.getLatestTransactions()
   let transactionsDescription = transactions.map { String(describing: $0) }.joined(separator: ", ")
-  print("🛜 ✅ SWIFT ASYNC recent transactions: \(transactionsDescription)")
+  print("🛜 ✅ SWIFT ASYNC latest transactions: \(transactionsDescription)")
+}
 
+final class AsyncSubject<T> {
+  private let continuation: AsyncStream<T>.Continuation
+  fileprivate let stream: AsyncStream<T>
+  init() {
+    let (stream, continuation) = AsyncStream<T>.makeStream()
+    self.stream = stream
+    self.continuation = continuation
+  }
+}
+
+extension AsyncSubject<Transaction>: IsTransactionPublisher {
+  func onValue(value: Transaction) {
+    self.continuation.yield(value)
+  }
+  func cancel() {
+    fatalError("FFibre does not yet support cancellation.")
+  }
+}
+
+extension GatewayClient {
+  func txStream() -> AsyncStream<Transaction> {
+    let subject = AsyncSubject<Transaction>()
+    self.subscribeStreamOfLatestTransactions(
+      publisher: subject
+    )
+    return subject.stream
+  }
+}
+
+func test_async_stream() async throws {
+  print("🚀🛜  SWIFT 'test_test_async_stream' start")
+  defer { print("🏁🛜  SWIFT 'test_test_async_stream' done") }
+
+  let gatewayClient = GatewayClient(
+    networkAntenna: Async(call: URLSession.shared.data(for:))
+  )
+
+  let stream = gatewayClient.txStream()
+  for await tx in stream.prefix(3) {
+    print("🚀🛜 SWIFT got async value from stream: \(tx)")
+  }
 }
 
 func test() async throws {
@@ -197,9 +239,15 @@ func test() async throws {
   }
 
   do {
-    try await test_tx_stream()
+    try await test_latest_tx()
   } catch {
     print("🛜 ❌ SWIFT 'test_networking - test_tx_stream' error: \(String(describing: error))")
+  }
+
+  do {
+    try await test_async_stream()
+  } catch {
+    print("🛜 ❌ SWIFT 'test_networking - test_async_stream' error: \(String(describing: error))")
   }
 
 }

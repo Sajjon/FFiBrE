@@ -1,10 +1,12 @@
-mod internal;
+#![feature(trait_upcasting)]
+
 mod ffibre_error;
+mod internal;
 mod uniffi_exported;
 
 pub mod prelude {
-    pub(crate) use crate::internal::*;
     pub use crate::ffibre_error::*;
+    pub(crate) use crate::internal::*;
     pub use crate::uniffi_exported::*;
 
     pub(crate) use serde::{Deserialize, Serialize};

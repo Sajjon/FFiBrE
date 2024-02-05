@@ -13,6 +13,19 @@ extension FfiNetworkingResponse {
   }
 }
 
+extension Transaction: CustomStringConvertible {
+  public var description: String {
+    """
+    Transaction(
+      epoch: \(self.epoch),
+      round: \(self.round),
+      txID: \(self.txId),
+      fee: \(self.feePaid)
+    )
+    """
+  }
+}
+
 extension FfiNetworkingOutcome {
 
   static func fail(error: Swift.Error, data: Data? = nil, urlResponse: URLResponse? = nil) -> Self {
@@ -157,17 +170,36 @@ func test_async(address: String) async throws {
   print("🛜 ✅ SWIFT ASYNC balance: \(balance)")
 }
 
+func test_balance() async throws {
+  let address = "account_rdx16xlfcpp0vf7e3gqnswv8j9k58n6rjccu58vvspmdva22kf3aplease"
+  try await test_callback(address: address)
+  try await test_async(address: address)
+}
+
+func test_tx_stream() async throws {
+  let gatewayClient = GatewayClient(
+    networkAntenna: Async(call: URLSession.shared.data(for:))
+  )
+  let transactions = try await gatewayClient.getLatestTransactions()
+  let transactionsDescription = transactions.map { String(describing: $0) }.joined(separator: ", ")
+  print("🛜 ✅ SWIFT ASYNC recent transactions: \(transactionsDescription)")
+
+}
+
 func test() async throws {
   print("🚀🛜  SWIFT 'test_networking' start")
   defer { print("🏁🛜  SWIFT 'test_networking' done") }
 
-  let address = "account_rdx16xlfcpp0vf7e3gqnswv8j9k58n6rjccu58vvspmdva22kf3aplease"
+  do {
+    try await test_balance()
+  } catch {
+    print("🛜 ❌ SWIFT 'test_networking - test_balance' error: \(String(describing: error))")
+  }
 
   do {
-    try await test_callback(address: address)
-    try await test_async(address: address)
+    try await test_tx_stream()
   } catch {
-    print("🛜 ❌ SWIFT 'test_networking' error: \(String(describing: error))")
+    print("🛜 ❌ SWIFT 'test_networking - test_tx_stream' error: \(String(describing: error))")
   }
 
 }

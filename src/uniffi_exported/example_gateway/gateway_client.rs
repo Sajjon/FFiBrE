@@ -1,8 +1,8 @@
 use crate::prelude::*;
+use serde::de;
 use std::borrow::Borrow;
 use std::sync::atomic::AtomicBool;
 use std::time::Duration;
-use serde::de;
 use tokio::task;
 use tokio::time;
 
@@ -44,57 +44,32 @@ impl GatewayClient {
     }
 
     pub fn subscribe_stream_of_latest_transactions(
-        &self,
+        self: Arc<Self>,
         publisher: Arc<dyn IsTransactionPublisher>,
     ) {
-        // loop_publish_on(
-        //     publisher,
-        //     Duration::from_secs(7),
-        //     Box::pin(async move { self.halt_and_catch_fire_get_latest_transactions().await }),
-        // )
-
-        /*
-        let (sender, receiver) = flume::unbounded();
-
-        // A future that will be spawned.
-        let future = self.halt_and_catch_fire_get_latest_transactions();
-
-        // A function that schedules the task when it gets woken up.
-        let schedule = move |runnable| sender.send(runnable).unwrap();
-
-        // Construct a task.
-        let (runnable, task) = async_task::spawn(future, schedule);
-
-        // Push the task into the queue by invoking its schedule function.
-        runnable.schedule();
-
-        for runnable in receiver {
-            runnable.run();
-            let apa: u8 = task.await;
-        }
-        */
-
         let cancelled = Arc::new(AtomicBool::new(false));
         let was_cancelled = cancelled.clone();
-        tokio::runtime::Runtime::new()
+        tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
             .unwrap()
-            .handle()
             .block_on(async {
+                let mut last_tx_id: String = "".to_string();
                 loop {
                     if was_cancelled.load(std::sync::atomic::Ordering::Relaxed) {
                         break;
                     }
-                    println!("Calling Gateway");
                     let value = self.halt_and_catch_fire_get_latest_transactions().await;
-                    println!("Got response from Gateway => publish value");
-                    publisher.publish_value(value);
-                    println!("Publish value");
-                    let delay = time::Duration::from_secs(2);
-                    println!("Sleeping for {:?}", delay);
+                    if value.tx_id != last_tx_id {
+                        // Only publish new, unique values
+                        last_tx_id = value.tx_id.clone();
+                        publisher.publish_value(value);
+                    }
+                    let delay = time::Duration::from_secs(5);
                     tokio::time::sleep(delay).await;
-                    println!("Woke up after sleeping {:?} => looping", delay);
                 }
             });
+        println!("subscribe_stream_of_latest_transactions ENDED");
     }
 
     pub async fn halt_and_catch_fire_get_latest_transactions(&self) -> Transaction {
@@ -114,25 +89,6 @@ impl GatewayClient {
         .await
     }
 }
-
-// type DynFut<T> = ::std::pin::Pin<Box<dyn Send + ::std::future::Future<Output = T>>>;
-
-// pub(crate) fn loop_publish_on<T>(
-//     publisher: Arc<dyn IsPublisher<T>>,
-//     periodicity_in_seconds: Duration,
-//     task: DynFut<T>,
-// ) {
-//     loop {
-//         let publ = publisher.clone();
-//         let t =
-//         tokio::spawn({
-//             async move {
-//                 let value = task.into_future().await;
-//                 publ.publish_value(value);
-//             }
-//         });
-//     }
-// }
 
 pub trait IsPublisher<T>: Send + Sync {
     fn publish_value(&self, value: T);

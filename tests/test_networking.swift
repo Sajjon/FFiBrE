@@ -207,9 +207,12 @@ extension AsyncSubject<Transaction>: IsTransactionPublisher {
 extension GatewayClient {
   func txStream() -> AsyncStream<Transaction> {
     let subject = AsyncSubject<Transaction>()
-    self.subscribeStreamOfLatestTransactions(
-      publisher: subject
-    )
+    Task {
+      // Non blocking, non returning loop
+      try await self.subscribeStreamOfLatestTransactions(
+        publisher: subject
+      )
+    }
     return subject.stream
   }
 }

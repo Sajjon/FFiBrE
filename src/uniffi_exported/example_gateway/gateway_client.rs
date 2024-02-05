@@ -39,19 +39,43 @@ impl GatewayClient {
         .await
     }
 
-    pub fn subscribe_stream_of_latest_transactions(
-        &self,
-        publisher: Arc<dyn IsTransactionPublisher>,
-    ) {
-        loop_publish_on(
-            publisher,
-            Duration::from_secs(7),
-            Box::pin(async move { self.halt_and_catch_fire_get_latest_transactions().await }),
-        )
-    }
+    // pub fn subscribe_stream_of_latest_transactions(
+    //     &self,
+    //     publisher: Arc<dyn IsTransactionPublisher>,
+    // ) {
+    //     // loop_publish_on(
+    //     //     publisher,
+    //     //     Duration::from_secs(7),
+    //     //     Box::pin(async move { self.halt_and_catch_fire_get_latest_transactions().await }),
+    //     // )
+
+    //     let (sender, receiver) = flume::unbounded();
+
+    //     // A future that will be spawned.
+    //     let future = self.halt_and_catch_fire_get_latest_transactions();
+
+    //     // A function that schedules the task when it gets woken up.
+    //     let schedule = move |runnable| sender.send(runnable).unwrap();
+
+    //     // Construct a task.
+    //     let (runnable, task) = async_task::spawn(future, schedule);
+
+    //     // Push the task into the queue by invoking its schedule function.
+    //     runnable.schedule();
+
+    //     for runnable in receiver {
+    //         runnable.run();
+    //         let apa: u8 = task.await;
+    //     }
+    // }
 
     pub async fn halt_and_catch_fire_get_latest_transactions(&self) -> Transaction {
-        self.get_latest_transactions().await.unwrap().first().unwrap().clone()
+        self.get_latest_transactions()
+            .await
+            .unwrap()
+            .first()
+            .unwrap()
+            .clone()
     }
     pub async fn get_latest_transactions(&self) -> Result<Vec<Transaction>, FFIBridgeError> {
         self.post(
@@ -63,24 +87,24 @@ impl GatewayClient {
     }
 }
 
-type DynFut<T> = ::std::pin::Pin<Box<dyn Send + ::std::future::Future<Output = T>>>;
+// type DynFut<T> = ::std::pin::Pin<Box<dyn Send + ::std::future::Future<Output = T>>>;
 
-pub(crate) fn loop_publish_on<T>(
-    publisher: Arc<dyn IsPublisher<T>>,
-    periodicity_in_seconds: Duration,
-    task: DynFut<T>,
-) {
-    loop {
-        let publ = publisher.clone();
-        let t = 
-        tokio::spawn({
-            async move {
-                let value = task.into_future().await;
-                publ.publish_value(value);
-            }
-        });
-    }
-}
+// pub(crate) fn loop_publish_on<T>(
+//     publisher: Arc<dyn IsPublisher<T>>,
+//     periodicity_in_seconds: Duration,
+//     task: DynFut<T>,
+// ) {
+//     loop {
+//         let publ = publisher.clone();
+//         let t =
+//         tokio::spawn({
+//             async move {
+//                 let value = task.into_future().await;
+//                 publ.publish_value(value);
+//             }
+//         });
+//     }
+// }
 
 pub trait IsPublisher<T>: Send + Sync {
     fn publish_value(&self, value: T);

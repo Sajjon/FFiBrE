@@ -1,6 +1,6 @@
 use crate::prelude::*;
 
-#[derive(Record, Clone)]
+#[derive(Record, Clone, Debug, Eq, PartialEq, Hash)]
 pub struct Transaction {
     pub epoch: u32,
     pub round: u32,

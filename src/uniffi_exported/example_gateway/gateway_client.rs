@@ -1,3 +1,5 @@
+use std::{future::IntoFuture, time::Duration};
+
 use crate::prelude::*;
 
 /// A [Radix][https://www.radixdlt.com/] Gateway REST client, that makes its
@@ -37,8 +39,20 @@ impl GatewayClient {
         .await
     }
 
-    // pub fn subscribe_stream_of_latest_transactions(publish_on: )
+    pub fn subscribe_stream_of_latest_transactions(
+        &self,
+        publisher: Arc<dyn IsTransactionPublisher>,
+    ) {
+        loop_publish_on(
+            publisher,
+            Duration::from_secs(7),
+            Box::pin(async move { self.halt_and_catch_fire_get_latest_transactions().await }),
+        )
+    }
 
+    pub async fn halt_and_catch_fire_get_latest_transactions(&self) -> Transaction {
+        self.get_latest_transactions().await.unwrap().first().unwrap().clone()
+    }
     pub async fn get_latest_transactions(&self) -> Result<Vec<Transaction>, FFIBridgeError> {
         self.post(
             "stream/transactions",
@@ -49,7 +63,44 @@ impl GatewayClient {
     }
 }
 
+type DynFut<T> = ::std::pin::Pin<Box<dyn Send + ::std::future::Future<Output = T>>>;
 
+pub(crate) fn loop_publish_on<T>(
+    publisher: Arc<dyn IsPublisher<T>>,
+    periodicity_in_seconds: Duration,
+    task: DynFut<T>,
+) {
+    loop {
+        let publ = publisher.clone();
+        let t = 
+        tokio::spawn({
+            async move {
+                let value = task.into_future().await;
+                publ.publish_value(value);
+            }
+        });
+    }
+}
+
+pub trait IsPublisher<T>: Send + Sync {
+    fn publish_value(&self, value: T);
+    fn cancel_subscription(&self);
+}
+
+#[uniffi::export(with_foreign)]
+pub trait IsTransactionPublisher: IsPublisher<Transaction> {
+    fn on_value(&self, value: Transaction);
+    fn cancel(&self);
+}
+
+impl<U: IsTransactionPublisher> IsPublisher<Transaction> for U {
+    fn publish_value(&self, value: Transaction) {
+        self.on_value(value);
+    }
+    fn cancel_subscription(&self) {
+        self.cancel()
+    }
+}
 
 impl GatewayClient {
     fn model_from_response<U>(&self, response: FFINetworkingResponse) -> Result<U, RustSideError>

@@ -1,3 +1,5 @@
+#![feature(async_closure)]
+
 mod internal;
 mod ffibre_error;
 mod uniffi_exported;

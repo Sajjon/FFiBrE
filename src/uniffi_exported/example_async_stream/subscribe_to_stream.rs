@@ -77,18 +77,22 @@ impl GatewayClient {
 }
 
 ////////
-pub struct CancellationListenerInner {
+
+#[derive(Object)]
+pub struct CancellationListener {
     sender: Mutex<Option<Sender<()>>>,
 }
 
-impl CancellationListenerInner {
+impl CancellationListener {
     pub(crate) fn new(sender: Sender<()>) -> Self {
         Self {
             sender: Mutex::new(Some(sender)),
         }
     }
-
-    pub(crate) fn notify_cancelled(&self) {
+}
+#[export]
+impl CancellationListener {
+    pub fn notify_cancelled(&self) {
         println!("❌ RUST received cancellation from Swift");
         self.sender
             .lock()
@@ -98,23 +102,5 @@ impl CancellationListenerInner {
             .send(())
             .map_err(|_| RustSideError::FailedToPropagateResultFromFFIOperationBackToDispatcher)
             .expect("Must never fail, since some context's in FFI side cannot be throwing.")
-    }
-}
-#[derive(Object)]
-pub struct CancellationListener {
-    cancellation_listener: CancellationListenerInner,
-}
-impl CancellationListener {
-    pub(crate) fn new(sender: Sender<()>) -> Self {
-        Self {
-            cancellation_listener: CancellationListenerInner::new(sender),
-        }
-    }
-}
-
-#[export]
-impl CancellationListener {
-    fn notify_cancelled(&self) {
-        self.cancellation_listener.notify_cancelled()
     }
 }

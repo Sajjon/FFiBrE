@@ -325,3 +325,27 @@ let balance = try await gatewayClient.getXrdBalanceOfAccount(address: "account_r
 print("SWIFT ✅ getXrdBalanceOfAccount success, got balance: \(balance) ✅")
 // 🎉
 ```
+
+# File IO demo
+
+See [example_file_io_interface](./src/uniffi_exported/example_file_io_interface)
+
+# Async Streams demo
+
+There are two different kinds of demos of Swift's [AsyncStream](https://developer.apple.com/documentation/swift/asyncstream) of values ([]`Transaction`](./src/uniffi_exported/example_gateway/models/stream_transaction.rs)) - both use the GatewayClient to fetch some data from Radix Gateway.
+
+## Looping from Rust
+
+See [`test_async_stream_from_rust.swift`](./tests/test_async_stream_from_rust.swift) using Rust side [`example_async_stream_from_rust`](./src/uniffi_exported/example_async_stream_from_rust)
+
+TL;DR This is a bad idea - at least in its current form - because it is very complex and requires DOUBLE sided cancellation listeners. Rust must listen to cancellation from Swift and Swift must listen to cancellation from Rust.
+
+## Looping from Swift
+
+Far better approach than the "From Rust" example mentioned above.
+
+See [`test_async_stream_from_swift.swift`](./tests/test_async_stream_from_rust.swift) which Rust side just calls[`get_latest_transactions_or_panic` in `GatewayClient`](./src/uniffi_exported/example_async_stream_from_rust/subscribe_to_stream.rs)
+
+Here we need not propagate any listeners at all between Swift and Rust, so it is much simpler.
+
+What if Rust side still need to schedule some repetitive work? We probably we would let Rust rely on FFI side (Swift Side) providing that...

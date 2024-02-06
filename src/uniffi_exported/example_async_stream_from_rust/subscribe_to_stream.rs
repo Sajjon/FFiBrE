@@ -64,8 +64,7 @@ impl GatewayClient {
             }
         });
     }
-}
-impl GatewayClient {
+
     pub async fn get_latest_transactions_or_panic(&self) -> Transaction {
         self.get_latest_transactions()
             .await

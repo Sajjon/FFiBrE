@@ -101,53 +101,45 @@ extension URLSession: FfiNetworkingExecutor {
   }
 }
 
-final class AsyncSubject<T> {
-  private let continuation: AsyncStream<T>.Continuation
-  private let stream: AsyncStream<T>
-  private var rustSideCancellationListener: CancellationListener?
-  private init() {
-    let (stream, continuation) = AsyncStream<T>.makeStream()
-    self.stream = stream
-    self.continuation = continuation
-  }
-  static func start(
-    operation: @escaping (AsyncSubject<T>) async throws -> Void
-  ) -> (stream: AsyncStream<T>, cancel: () -> Void) {
-    let subject = AsyncSubject<T>()
-    let task = Task {
-      // Non blocking, non returning loop
-      try await operation(subject)
+extension AsyncStream where Element: Equatable {
+
+  static func new(
+    label: String,
+    nextElement: @escaping () async throws -> Element
+  ) -> (
+    stream: Self, cancel: () -> Void
+  ) {
+    var cancel: (() -> Void)!
+    let stream = AsyncStream<Element> { (continuation: AsyncStream<Element>.Continuation) in
+      let task = Task {
+        var last: Element?
+        while !Task.isCancelled {
+          try Task.checkCancellation()
+          let value = try await nextElement()
+          if value != last {
+            continuation.yield(value)
+          } else {
+            print("SWIFT 🐌 \(label) duplicate ignored")
+          }
+          last = value
+          try await Task.sleep(for: .seconds(7))
+        }
+        continuation.finish()
+      }
+      cancel = {
+        task.cancel()
+      }
+      continuation.onTermination = { termination in
+        task.cancel()
+      }
     }
-    subject.continuation.onTermination = { termination in
-      print("❌ SWIFT subject.continuation.onTermination: \(termination)")
-      task.cancel()
-      subject.rustSideCancellationListener?.notifyCancelled()
-    }
-    return (subject.stream, subject.continuation.finish)
+    return (stream, cancel)
   }
 }
 
 extension GatewayClient {
-  func txStream() -> (stream: AsyncStream<Transaction>, cancel: () -> Void) {
-    AsyncSubject<Transaction>.start {
-      await self.subscribeStreamOfLatestTransactions(
-        publisher: $0 as IsTransactionPublisher
-      )
-    }
-  }
-}
-
-extension AsyncSubject<Transaction>: IsTransactionPublisher {
-  func onValue(value: Transaction) {
-    self.continuation.yield(value)
-  }
-  func finishedFromRustSide() {
-    print("❌ SWIFT received finishedFromRustSide")
-    self.continuation.finish()
-  }
-  func rustIsSubscribedNotifyCancellationOn(listener: CancellationListener) {
-    print("🌱 SWIFT rustIsSubscribedNotifyCancellationOn got listener")
-    self.rustSideCancellationListener = listener
+  func txStream(label: String) -> (stream: AsyncStream<Transaction>, cancel: () -> Void) {
+    AsyncStream.new(label: label) { [unowned self] in await self.getLatestTransactionsOrPanic() }
   }
 }
 
@@ -157,22 +149,26 @@ func test_async_stream() async throws {
     networkAntenna: URLSession.shared
   )
 
-  let t = Task {
-    let (stream, cancel) = gatewayClient.txStream()
-    for await tx in stream.prefix(3) {
-      print("🚀🛜  ❤️ SWIFT FOO async value from stream: \(tx)")
+  await withDiscardingTaskGroup { taskGroup in
+    taskGroup.addTask {
+      let label = "FOO"
+      let (stream, cancel) = gatewayClient.txStream(label: label)
+      for await tx in stream.prefix(3) {
+        print("🚀🛜  💜 SWIFT \(label) async value from stream: \(tx)")
 
-      print("SWIFT ✨ cancelling FOO task")
-      cancel()
+        print("🚀🛜  💜 SWIFT ✨ cancelling \(label) task (and breaking...)")
+        cancel();break
+      }
+    }
+
+    taskGroup.addTask {
+      let label = "BAR"
+      let (stream, _) = gatewayClient.txStream(label: label)
+      for await tx in stream.prefix(3) {
+        print("🚀🛜  💚SWIFT \(label) async value from stream: \(tx)")
+      }
     }
   }
-  let u = Task {
-    let (stream, _) = gatewayClient.txStream()
-    for await tx in stream.prefix(3) {
-      print("🚀🛜  💚SWIFT BAR async value from stream: \(tx)")
-    }
-  }
-  let _ = await [t.value, u.value]
 }
 
 func test() async throws {

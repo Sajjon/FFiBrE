@@ -15,7 +15,7 @@ impl GetEntityDetailsRequest {
 
 //
 // RESPONSE
-// 
+//
 
 #[derive(Deserialize, Clone)]
 pub struct FungibleResourceItem {

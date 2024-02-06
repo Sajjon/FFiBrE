@@ -1,10 +1,4 @@
 use crate::prelude::*;
-use serde::de;
-use std::borrow::Borrow;
-use std::sync::atomic::AtomicBool;
-use std::time::Duration;
-use tokio::task;
-use tokio::time;
 
 /// A [Radix][https://www.radixdlt.com/] Gateway REST client, that makes its
 /// network request using a "network antenna" 'installed' from FFI Side (Swift side).
@@ -43,52 +37,6 @@ impl GatewayClient {
         .await
     }
 
-    pub fn subscribe_stream_of_latest_transactions(
-        self: Arc<Self>,
-        publisher: Arc<dyn IsTransactionPublisher>,
-    ) {
-        let (sender, receiver) = channel::<()>();
-
-        let cancellation_listener = Arc::new(CancellationListener::new(sender));
-        publisher.rust_is_subscribed_notify_cancellation_on(cancellation_listener);
-
-        let runtime = tokio::runtime::Builder::new_multi_thread()
-            .enable_all()
-            .build()
-            .unwrap();
-
-        runtime.block_on(async {
-            tokio::select! {
-                _ = async {
-                    let mut last_tx_id: String = "".to_string();
-                    loop {
-                        let value = self.halt_and_catch_fire_get_latest_transactions().await;
-                        if value.tx_id != last_tx_id {
-                            // Only publish new, unique values
-                            last_tx_id = value.tx_id.clone();
-                            publisher.publish_value(value);
-                        }
-                        let delay = time::Duration::from_secs(5);
-                        tokio::time::sleep(delay).await;
-                    }
-                } => {
-                    // loop finished?
-                }
-                _ = async { receiver.await } => { println!("❌ RUST cancellation?") }
-            }
-        });
-        publisher.finished_from_rust();
-        println!("subscribe_stream_of_latest_transactions ENDED");
-    }
-
-    pub async fn halt_and_catch_fire_get_latest_transactions(&self) -> Transaction {
-        self.get_latest_transactions()
-            .await
-            .unwrap()
-            .first()
-            .unwrap()
-            .clone()
-    }
     pub async fn get_latest_transactions(&self) -> Result<Vec<Transaction>, FFIBridgeError> {
         self.post(
             "stream/transactions",
@@ -96,27 +44,6 @@ impl GatewayClient {
             parse_transactions,
         )
         .await
-    }
-}
-
-pub trait IsPublisher<T>: Send + Sync {
-    fn publish_value(&self, value: T);
-    fn finished_from_rust(&self);
-}
-
-#[uniffi::export(with_foreign)]
-pub trait IsTransactionPublisher: IsPublisher<Transaction> {
-    fn on_value(&self, value: Transaction);
-    fn rust_is_subscribed_notify_cancellation_on(&self, listener: Arc<CancellationListener>);
-    fn finished_from_rust_side(&self);
-}
-
-impl<U: IsTransactionPublisher> IsPublisher<Transaction> for U {
-    fn publish_value(&self, value: Transaction) {
-        self.on_value(value);
-    }
-    fn finished_from_rust(&self) {
-        self.finished_from_rust_side()
     }
 }
 

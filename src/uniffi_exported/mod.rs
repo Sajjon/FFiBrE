@@ -1,3 +1,4 @@
+mod example_async_stream;
 mod example_file_io_interface;
 mod example_gateway;
 mod file_io;

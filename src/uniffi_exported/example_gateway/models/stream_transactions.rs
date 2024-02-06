@@ -5,11 +5,6 @@ pub struct GetTransactionStreamRequest {
     pub(crate) limit_per_page: u16,
 }
 
-impl GetTransactionStreamRequest {
-    pub(crate) fn new(limit_per_page: u16) -> Self {
-        Self { limit_per_page }
-    }
-}
 impl Default for GetTransactionStreamRequest {
     fn default() -> Self {
         Self { limit_per_page: 5 }

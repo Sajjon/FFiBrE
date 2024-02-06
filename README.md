@@ -340,6 +340,9 @@ See [`test_async_stream_from_rust.swift`](./tests/test_async_stream_from_rust.sw
 
 TL;DR This is a bad idea - at least in its current form - because it is very complex and requires DOUBLE sided cancellation listeners. Rust must listen to cancellation from Swift and Swift must listen to cancellation from Rust.
 
+This is built with `tokio::runtime::Builder::new_multi_thread()` and `block_on` inside a Rust `async fn` - need not be `async` in Rust but marked as such forcing us to do `Task { rust_async_fn() }` in Swift, thus letting it loop and run in a detached
+background task.
+
 ## Looping from Swift
 
 Far better approach than the "From Rust" example mentioned above.

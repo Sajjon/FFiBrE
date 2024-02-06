@@ -347,7 +347,7 @@ background task.
 
 Far better approach than the "From Rust" example mentioned above.
 
-See [`test_async_stream_from_swift.swift`](./tests/test_async_stream_from_rust.swift) which Rust side just calls[`get_latest_transactions_or_panic` in `GatewayClient`](./src/uniffi_exported/example_async_stream_from_rust/subscribe_to_stream.rs)
+See [`test_async_stream_from_swift.swift`](./tests/test_async_stream_from_swift.swift) which Rust side just calls[`get_latest_transactions_or_panic` in `GatewayClient`](./src/uniffi_exported/example_async_stream_from_rust/subscribe_to_stream.rs)
 
 Here we need not propagate any listeners at all between Swift and Rust, so it is much simpler.
 

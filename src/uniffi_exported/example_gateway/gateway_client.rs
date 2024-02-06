@@ -47,28 +47,37 @@ impl GatewayClient {
         self: Arc<Self>,
         publisher: Arc<dyn IsTransactionPublisher>,
     ) {
-        let cancelled = Arc::new(AtomicBool::new(false));
-        let was_cancelled = cancelled.clone();
-        tokio::runtime::Builder::new_multi_thread()
+        let (sender, receiver) = channel::<()>();
+
+        let cancellation_listener = Arc::new(CancellationListener::new(sender));
+        publisher.rust_is_subscribed_notify_cancellation_on(cancellation_listener);
+
+        let runtime = tokio::runtime::Builder::new_multi_thread()
             .enable_all()
             .build()
-            .unwrap()
-            .block_on(async {
-                let mut last_tx_id: String = "".to_string();
-                loop {
-                    if was_cancelled.load(std::sync::atomic::Ordering::Relaxed) {
-                        break;
+            .unwrap();
+
+        runtime.block_on(async {
+            tokio::select! {
+                _ = async {
+                    let mut last_tx_id: String = "".to_string();
+                    loop {
+                        let value = self.halt_and_catch_fire_get_latest_transactions().await;
+                        if value.tx_id != last_tx_id {
+                            // Only publish new, unique values
+                            last_tx_id = value.tx_id.clone();
+                            publisher.publish_value(value);
+                        }
+                        let delay = time::Duration::from_secs(5);
+                        tokio::time::sleep(delay).await;
                     }
-                    let value = self.halt_and_catch_fire_get_latest_transactions().await;
-                    if value.tx_id != last_tx_id {
-                        // Only publish new, unique values
-                        last_tx_id = value.tx_id.clone();
-                        publisher.publish_value(value);
-                    }
-                    let delay = time::Duration::from_secs(5);
-                    tokio::time::sleep(delay).await;
+                } => {
+                    // loop finished?
                 }
-            });
+                _ = async { receiver.await } => { println!("❌ RUST cancellation?") }
+            }
+        });
+        publisher.finished_from_rust();
         println!("subscribe_stream_of_latest_transactions ENDED");
     }
 
@@ -92,21 +101,22 @@ impl GatewayClient {
 
 pub trait IsPublisher<T>: Send + Sync {
     fn publish_value(&self, value: T);
-    fn cancel_subscription(&self);
+    fn finished_from_rust(&self);
 }
 
 #[uniffi::export(with_foreign)]
 pub trait IsTransactionPublisher: IsPublisher<Transaction> {
     fn on_value(&self, value: Transaction);
-    fn cancel(&self);
+    fn rust_is_subscribed_notify_cancellation_on(&self, listener: Arc<CancellationListener>);
+    fn finished_from_rust_side(&self);
 }
 
 impl<U: IsTransactionPublisher> IsPublisher<Transaction> for U {
     fn publish_value(&self, value: Transaction) {
         self.on_value(value);
     }
-    fn cancel_subscription(&self) {
-        self.cancel()
+    fn finished_from_rust(&self) {
+        self.finished_from_rust_side()
     }
 }
 

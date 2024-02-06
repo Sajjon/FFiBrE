@@ -187,11 +187,38 @@ func test_latest_tx() async throws {
 
 final class AsyncSubject<T> {
   private let continuation: AsyncStream<T>.Continuation
-  fileprivate let stream: AsyncStream<T>
-  init() {
+  private let stream: AsyncStream<T>
+  private var rustSideCancellationListener: CancellationListener?
+  private init() {
     let (stream, continuation) = AsyncStream<T>.makeStream()
     self.stream = stream
     self.continuation = continuation
+  }
+  static func start(
+    operation: @escaping (AsyncSubject<T>) async throws -> Void
+  ) -> (stream: AsyncStream<T>, cancel: () -> Void) {
+    let subject = AsyncSubject<T>()
+    let task = Task {
+      // Non blocking, non returning loop
+      try await operation(subject)
+      print("❌ SWIFT subject task operation returned")
+    }
+    subject.continuation.onTermination = { termination in
+      print("❌ SWIFT subject.continuation.onTermination: \(termination)")
+      task.cancel()
+      subject.rustSideCancellationListener?.notifyCancelled()
+    }
+    return (subject.stream, subject.continuation.finish)
+  }
+}
+
+extension GatewayClient {
+  func txStream() -> (stream: AsyncStream<Transaction>, cancel: () -> Void) {
+    AsyncSubject<Transaction>.start {
+      try await self.subscribeStreamOfLatestTransactions(
+        publisher: $0 as IsTransactionPublisher
+      )
+    }
   }
 }
 
@@ -199,21 +226,13 @@ extension AsyncSubject<Transaction>: IsTransactionPublisher {
   func onValue(value: Transaction) {
     self.continuation.yield(value)
   }
-  func cancel() {
-    fatalError("FFibre does not yet support cancellation.")
+  func finishedFromRustSide() {
+    print("❌ SWIFT finishedFromRustSide")
+    self.continuation.finish()
   }
-}
-
-extension GatewayClient {
-  func txStream() -> AsyncStream<Transaction> {
-    let subject = AsyncSubject<Transaction>()
-    Task {
-      // Non blocking, non returning loop
-      try await self.subscribeStreamOfLatestTransactions(
-        publisher: subject
-      )
-    }
-    return subject.stream
+  func rustIsSubscribedNotifyCancellationOn(listener: CancellationListener) {
+    print("🌱 SWIFT rustIsSubscribedNotifyCancellationOn got listener")
+    self.rustSideCancellationListener = listener
   }
 }
 
@@ -225,10 +244,21 @@ func test_async_stream() async throws {
     networkAntenna: Async(call: URLSession.shared.data(for:))
   )
 
-  let stream = gatewayClient.txStream()
-  for await tx in stream.prefix(3) {
-    print("🚀🛜 SWIFT got async value from stream: \(tx)")
+  let t = Task {
+    let (stream, cancel) = gatewayClient.txStream()
+    for await tx in stream.prefix(3) {
+      print(
+        "🚀🛜  ❤️ SWIFT PING async value from stream: \(tx) CANCELLING")
+      cancel()
+    }
   }
+  let u = Task {
+    let (stream, _) = gatewayClient.txStream()
+    for await tx in stream.prefix(3) {
+      print("🚀🛜  💚SWIFT PONG async value from stream: \(tx)")
+    }
+  }
+  let txs = try await [t.value, u.value]
 }
 
 func test() async throws {

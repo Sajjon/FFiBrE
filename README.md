@@ -332,7 +332,7 @@ See [example_file_io_interface](./src/uniffi_exported/example_file_io_interface)
 
 # Async Streams demo
 
-There are two different kinds of demos of Swift's [AsyncStream](https://developer.apple.com/documentation/swift/asyncstream) of values ([`Transaction`](./src/uniffi_exported/example_gateway/models/stream_transactions.rs)) - both use the GatewayClient to fetch some data from Radix Gateway.
+There are two different kinds of demos of Swift's [AsyncStream](https://developer.apple.com/documentation/swift/asyncstream) of values ([`Transaction`](./src/uniffi_exported/example_gateway/parse/transaction.rs)) - both use the GatewayClient to fetch some data from Radix Gateway.
 
 ## Looping from Rust
 

@@ -8,7 +8,12 @@ build = "build.rs"
 uniffi = { version = "0.26.1", features = ["build"] }
 
 [dependencies]
-tokio = { version = "1.35.1", features = ["sync"] }
+tokio = { version = "1.35.1", features = [
+    "sync",
+    "time",
+    "macros",
+    "rt-multi-thread",
+] }
 serde = { version = "1.0.196", features = ["derive"] }
 serde_json = { version = "1.0.113", features = ["preserve_order"] }
 thiserror = "1.0.56"

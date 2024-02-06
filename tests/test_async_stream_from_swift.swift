@@ -101,109 +101,85 @@ extension URLSession: FfiNetworkingExecutor {
   }
 }
 
-public final class Async<Request, Intermediary, Response> {
-  typealias Operation = (Request) async throws -> Intermediary
-  typealias MapToResponse = (Intermediary) async throws -> Response
+extension AsyncStream where Element: Equatable {
 
-  private var task: Task<Void, Never>?
-
-  let operation: Operation
-  let mapToResponse: MapToResponse
-
-  init(
-    operation: @escaping Operation,
-    mapToResponse: @escaping MapToResponse
+  static func new(
+    label: String,
+    nextElement: @escaping () async throws -> Element
+  ) -> (
+    stream: Self, cancel: () -> Void
   ) {
-    self.operation = operation
-    self.mapToResponse = mapToResponse
+    var cancel: (() -> Void)!
+    let stream = AsyncStream<Element> { (continuation: AsyncStream<Element>.Continuation) in
+      let task = Task {
+        var last: Element?
+        while !Task.isCancelled {
+          try Task.checkCancellation()
+          let value = try await nextElement()
+          if value != last {
+            continuation.yield(value)
+          } else {
+            print("SWIFT 🐌 \(label) duplicate ignored")
+          }
+          last = value
+          try await Task.sleep(for: .seconds(7))
+        }
+        continuation.finish()
+      }
+      cancel = {
+        task.cancel()
+      }
+      continuation.onTermination = { termination in
+        task.cancel()
+      }
+    }
+    return (stream, cancel)
   }
 }
 
-extension Async: FfiNetworkingExecutor
-where
-  Request == FfiNetworkingRequest, Intermediary == (Data, URLResponse),
-  Response == FfiNetworkingResponse
-{
-
-  convenience init(
-    call op: @escaping (URLRequest) async throws -> Intermediary
-  ) {
-    self.init(
-      operation: { (rustRequest: FfiNetworkingRequest) in try await op(rustRequest.urlRequest()) },
-      mapToResponse: { (data: Data, urlResponse: URLResponse) in
-        FfiNetworkingResponse(data: data, urlResponse: urlResponse)
-      }
-    )
+extension GatewayClient {
+  func txStream(label: String) -> (stream: AsyncStream<Transaction>, cancel: () -> Void) {
+    AsyncStream.new(label: label) { [unowned self] in await self.getLatestTransactionsOrPanic() }
   }
+}
 
-  public func executeNetworkingRequest(
-    request rustRequest: FfiNetworkingRequest,
-    listenerRustSide: FfiNetworkingOutcomeListener
-  ) throws {
-    self.task = Task {
-      do {
-        let intermediary = try await self.operation(rustRequest)
-        let response = try await self.mapToResponse(intermediary)
-        listenerRustSide.notifyOutcome(result: .success(value: response))
-      } catch {
-        listenerRustSide.notifyOutcome(result: .fail(error: error))
+func test_async_stream() async throws {
+
+  let gatewayClient = GatewayClient(
+    networkAntenna: URLSession.shared
+  )
+
+  await withDiscardingTaskGroup { taskGroup in
+    taskGroup.addTask {
+      let label = "FOO"
+      let (stream, cancel) = gatewayClient.txStream(label: label)
+      for await tx in stream.prefix(3) {
+        print("🚀🛜  💜 SWIFT \(label) async value from stream: \(tx)")
+
+        print("🚀🛜  💜 SWIFT ✨ cancelling \(label) task (and breaking...)")
+        cancel();break
+      }
+    }
+
+    taskGroup.addTask {
+      let label = "BAR"
+      let (stream, _) = gatewayClient.txStream(label: label)
+      for await tx in stream.prefix(3) {
+        print("🚀🛜  💚SWIFT \(label) async value from stream: \(tx)")
       }
     }
   }
 }
 
-func test_callback(address: String) async throws {
-  let gatewayClient = GatewayClient(
-    networkAntenna: URLSession.shared
-  )
-
-  let balance = try await gatewayClient.getXrdBalanceOfAccount(address: address)
-  print("🛜 ✅ SWIFT CB balance: \(balance)")
-}
-
-func test_async(address: String) async throws {
-  let gatewayClient = GatewayClient(
-    networkAntenna: Async(call: URLSession.shared.data(for:))
-  )
-
-  let balance = try await gatewayClient.getXrdBalanceOfAccount(address: address)
-  print("🛜 ✅ SWIFT ASYNC balance: \(balance)")
-}
-
-func test_balance() async throws {
-  let address = "account_rdx16xlfcpp0vf7e3gqnswv8j9k58n6rjccu58vvspmdva22kf3aplease"
-  try await test_callback(address: address)
-  try await test_async(address: address)
-}
-
-func test_latest_tx() async throws {
-  let gatewayClient = GatewayClient(
-    networkAntenna: Async(call: URLSession.shared.data(for:))
-  )
-  let transactions = try await gatewayClient.getLatestTransactions()
-  let transactionsDescription = transactions.map { String(describing: $0) }.joined(separator: ", ")
-  print("🛜 ✅ SWIFT ASYNC latest transactions: \(transactionsDescription)")
-}
-
-
-
 func test() async throws {
-  print("🚀🛜  SWIFT 'test_networking' start")
-  defer { print("🏁🛜  SWIFT 'test_networking' done") }
+  print("🚀🛜  SWIFT 'test_test_async_stream' start")
+  defer { print("🏁🛜  SWIFT 'test_test_async_stream' done") }
 
   do {
-    try await test_balance()
+    try await test_async_stream()
   } catch {
-    print("🛜 ❌ SWIFT 'test_networking - test_balance' error: \(String(describing: error))")
+    print("🛜 ❌ SWIFT 'test_async_stream' error: \(String(describing: error))")
   }
-
-  do {
-    try await test_latest_tx()
-  } catch {
-    print("🛜 ❌ SWIFT 'test_networking - test_tx_stream' error: \(String(describing: error))")
-  }
-
-
 
 }
 

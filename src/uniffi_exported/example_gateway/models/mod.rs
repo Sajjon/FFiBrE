@@ -1,5 +1,5 @@
-mod requests;
-mod responses;
+mod entity_details;
+mod stream_transactions;
 
-pub(crate) use requests::*;
-pub(crate) use responses::*;
+pub(crate) use entity_details::*;
+pub(crate) use stream_transactions::*;

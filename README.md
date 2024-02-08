@@ -17,6 +17,29 @@ All examples have two versions:
 - Callback based
 - Async wrapped (translated to callback)
 
+### Kotlin
+
+```sh
+brew install kotlin
+```
+
+#### Kotlin dependencies
+> [!IMPORTANT]  
+> To run tests in Kotlin you also need to download 
+> * [JNA](https://mvnrepository.com/artifact/net.java.dev.jna/jna) (currently tested under version `5.13.0`)
+> * [Coroutines-JVM](https://mvnrepository.com/artifact/org.jetbrains.kotlinx/kotlinx-coroutines-core-jvm/1.8.0-RC2)
+> * [OkHttp](https://mvnrepository.com/artifact/com.squareup.okhttp3/okhttp/4.12.0) For network requests
+> * [Okio](https://mvnrepository.com/artifact/com.squareup.okio/okio/3.7.0) Transitive dependency for OkHttp
+> ``` sh
+> curl https://repo1.maven.org/maven2/net/java/dev/jna/jna/5.13.0/jna-5.13.0.jar
+> curl https://repo1.maven.org/maven2/org/jetbrains/kotlinx/kotlinx-coroutines-core-jvm/1.8.0-RC2/kotlinx-coroutines-core-jvm-1.8.0-RC2.jar
+> curl https://repo1.maven.org/maven2/com/squareup/okhttp3/okhttp/4.12.0/okhttp-4.12.0.jar
+> curl https://repo1.maven.org/maven2/com/squareup/okio/okio/3.7.0/okio-3.7.0.jar
+> ```
+
+### `direnv`
+Install [`direnv`](https://direnv.net/) in order to automatically load `CLASSPATH` and `JAVA_OPTS` in [`.envrc`](.envrc), so that you can run Kotlin bindgen tests from cli using the command in the bottom of this document - i.e. without having to export `CLASSPATH``.
+
 # Test
 
 Run test:

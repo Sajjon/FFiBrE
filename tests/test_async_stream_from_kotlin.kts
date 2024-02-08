@@ -1,5 +1,6 @@
 import uniffi.ffibre.*
 import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.*
 import okhttp3.*
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.Headers.Companion.toHeaders
@@ -56,36 +57,40 @@ object KotlinNetworkAntenna: FfiNetworkingExecutor {
     }
 }
 
-suspend fun testBalance(address: String) = runCatching {
-    println("🛜 ┌ Test Balance")
-    println("🛜 ┝ Request for $address")
+fun testAsyncStream(): Flow<Transaction> = flow {
     val client = GatewayClient(networkAntenna = KotlinNetworkAntenna)
-    client.getXrdBalanceOfAccount(address = address)
-}.onSuccess { balance ->
-    println("🛜 ┝ $balance ")
-    println("🛜 └ ✅ ")
-}.onFailure { error ->
-    println("🛜 └ ❌  ${error}")
+
+    while (true) {
+        val transaction = client.getLatestTransactionsOrPanic()
+        emit(transaction)
+        delay(7000)
+    }
 }
 
-suspend fun testLatestTransactions() = runCatching {
-    println("🛜 ┌ Test Latest Transactions")
-    val client = GatewayClient(networkAntenna = KotlinNetworkAntenna)
-    client.getLatestTransactions()
-}.onSuccess { transactions ->
-     println("${transactions.joinToString(prefix = "🛜 ┝ ", separator = "\n🛜 ┝ ")}")
-     println("🛜 └ ✅ ")
-}.onFailure { error ->
-     println("🛜 └ ❌  ${error}")
-}
 
-fun test() = runBlocking {
-    println("🛜 🚀 Kotlin 'test_networking' start")
+fun test() {
+    println("🛜 🚀 Kotlin 'test_test_async_stream' start")
+    runBlocking {
+        testAsyncStream()
+            .onStart {
+                println("🛜 ┌ Subscribed to transactions")
+            }
+            .distinctUntilChanged { old: Transaction, new: Transaction ->
+                if (old == new) {
+                    println("🛜 ┝ IGNORED: Latest transaction is still `${new.txId}`.")
+                }
 
-    testBalance(address = "account_rdx16xlfcpp0vf7e3gqnswv8j9k58n6rjccu58vvspmdva22kf3aplease")
-    testLatestTransactions()
-
-    println("🛜 🏁 Kotlin 'test_networking' done")
+                old == new
+            }
+            .take(3)
+            .catch { error: Throwable ->
+                println("🛜 ┝ ❌ ${error}")
+            }
+            .collect { transaction ->
+                println("🛜 ┝ $transaction")
+            }
+    }
+    println("🛜 └ 🏁 Kotlin 'test_test_async_stream' done")
 }
 
 test()

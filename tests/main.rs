@@ -13,5 +13,6 @@ mod tests {
      );
      uniffi::build_foreign_language_testcases!(
          "tests/test_file_io.swift",
+         "tests/test_file_io.kts",
      );
 }

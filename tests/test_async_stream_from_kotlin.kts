@@ -84,7 +84,7 @@ fun test() {
             }
             .take(3)
             .catch { error: Throwable ->
-                println("🛜 ┝ ❌ ${error}")
+                println("🛜 ┝ ❌ $error")
             }
             .collect { transaction ->
                 println("🛜 ┝ $transaction")

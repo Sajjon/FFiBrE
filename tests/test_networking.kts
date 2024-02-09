@@ -65,7 +65,7 @@ suspend fun testBalance(address: String) = runCatching {
     println("🛜 ┝ $balance ")
     println("🛜 └ ✅ ")
 }.onFailure { error ->
-    println("🛜 └ ❌  ${error}")
+    println("🛜 └ ❌  $error")
 }
 
 suspend fun testLatestTransactions() = runCatching {
@@ -76,7 +76,7 @@ suspend fun testLatestTransactions() = runCatching {
      println("${transactions.joinToString(prefix = "🛜 ┝ ", separator = "\n🛜 ┝ ")}")
      println("🛜 └ ✅ ")
 }.onFailure { error ->
-     println("🛜 └ ❌  ${error}")
+     println("🛜 └ ❌  $error")
 }
 
 fun test() = runBlocking {
